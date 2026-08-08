@@ -349,48 +349,62 @@ function cargarDatosMaestroSQLite(db) {
 // ============================================================
 // QUERY VI-01.01 - VERSIÓN CORREGIDA
 // ============================================================
+// ============================================================
+// QUERY VI-01.01 - VERSIÓN CORREGIDA (DENOMINADOR MISMA FECHA)
+// ============================================================
 function queryVI0101(f_i, f_f) {
-    return `WITH APN AS (
+    return `WITH ATENCIONES AS (
+        SELECT 
+            Id_Paciente, 
+            Id_Establecimiento, 
+            Fecha_Atencion AS Fecha_Atencion
+        FROM NominalTrama 
+        WHERE Fecha_Atencion BETWEEN '${f_i}' AND '${f_f}'
+    ),
+    -- APN: códigos Z34% o Z35%
+    APN AS (
         SELECT 
             Id_Paciente, 
             Id_Establecimiento, 
             Fecha_Atencion AS Fecha_APN
-        FROM NominalTrama 
-        WHERE Fecha_Atencion BETWEEN '${f_i}' AND '${f_f}'
-          AND Codigo_Item IN ('Z3491','Z3492','Z3493','Z3591','Z3592','Z3593')
+        FROM ATENCIONES 
+        WHERE Codigo_Item IN ('Z3491','Z3492','Z3493','Z3591','Z3592','Z3593')
     ),
+    -- TAMIZAJE: código 96150.01
     TAMIZAJE AS (
         SELECT 
             Id_Paciente, 
             Id_Establecimiento, 
             Fecha_Atencion AS Fecha_Tamizaje
-        FROM NominalTrama 
+        FROM ATENCIONES 
         WHERE Codigo_Item = '96150.01'
     ),
+    -- POSITIVO: R456 tipo D
     POSITIVO AS (
         SELECT 
             Id_Paciente, 
             Id_Establecimiento, 
             Fecha_Atencion AS Fecha_Positivo
-        FROM NominalTrama 
+        FROM ATENCIONES 
         WHERE Codigo_Item = 'R456' 
           AND Tipo_Diagnostico = 'D'
     ),
-    -- DENOMINADOR: APN + TAMIZAJE (mismo establecimiento)
+    -- DENOMINADOR: APN + TAMIZAJE en la MISMA FECHA y mismo establecimiento
     DENOMINADOR AS (
         SELECT 
             A.Id_Paciente,
             A.Id_Establecimiento,
             A.Fecha_APN,
-            MIN(T.Fecha_Tamizaje) AS Fecha_Tamizaje,
+            T.Fecha_Tamizaje,
             1 AS DENOMINADOR
         FROM APN A
         INNER JOIN TAMIZAJE T 
             ON T.Id_Paciente = A.Id_Paciente 
             AND T.Id_Establecimiento = A.Id_Establecimiento
-        GROUP BY A.Id_Paciente, A.Id_Establecimiento, A.Fecha_APN
+            AND T.Fecha_Tamizaje = A.Fecha_APN  -- ✅ MISMA FECHA
+        GROUP BY A.Id_Paciente, A.Id_Establecimiento, A.Fecha_APN, T.Fecha_Tamizaje
     ),
-    -- NUMERADOR: DENOMINADOR + POSITIVO (mismo día que APN)
+    -- NUMERADOR: DENOMINADOR + POSITIVO en la MISMA FECHA
     NUMERADOR AS (
         SELECT 
             D.Id_Paciente,
@@ -400,7 +414,7 @@ function queryVI0101(f_i, f_f) {
             D.DENOMINADOR,
             CASE 
                 WHEN P.Id_Paciente IS NOT NULL 
-                 AND DATE(P.Fecha_Positivo) = DATE(D.Fecha_APN)
+                 AND P.Fecha_Positivo = D.Fecha_APN  -- ✅ MISMA FECHA
                 THEN 1 
                 ELSE 0 
             END AS NUMERADOR,
@@ -409,6 +423,7 @@ function queryVI0101(f_i, f_f) {
         LEFT JOIN POSITIVO P 
             ON P.Id_Paciente = D.Id_Paciente 
             AND P.Id_Establecimiento = D.Id_Establecimiento
+            AND P.Fecha_Positivo = D.Fecha_APN  -- ✅ MISMA FECHA
     )
     SELECT 
         P.Numero_Documento AS DNI_PACIENTE,
