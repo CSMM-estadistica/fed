@@ -347,7 +347,7 @@ function cargarDatosMaestroSQLite(db) {
 }
 
 // ============================================================
-// QUERY VI-01.01 (CORREGIDA)
+// QUERY VI-01.01 - VERSIÓN CORREGIDA
 // ============================================================
 function queryVI0101(f_i, f_f) {
     return `WITH APN AS (
@@ -358,16 +358,14 @@ function queryVI0101(f_i, f_f) {
         FROM NominalTrama 
         WHERE Fecha_Atencion BETWEEN '${f_i}' AND '${f_f}'
           AND Codigo_Item IN ('Z3491','Z3492','Z3493','Z3591','Z3592','Z3593')
-        GROUP BY Id_Paciente, Id_Establecimiento, Fecha_Atencion
     ),
     TAMIZAJE AS (
         SELECT 
             Id_Paciente, 
             Id_Establecimiento, 
-            MIN(Fecha_Atencion) AS Fecha_Tamizaje
+            Fecha_Atencion AS Fecha_Tamizaje
         FROM NominalTrama 
         WHERE Codigo_Item = '96150.01'
-        GROUP BY Id_Paciente, Id_Establecimiento
     ),
     POSITIVO AS (
         SELECT 
@@ -377,21 +375,22 @@ function queryVI0101(f_i, f_f) {
         FROM NominalTrama 
         WHERE Codigo_Item = 'R456' 
           AND Tipo_Diagnostico = 'D'
-        GROUP BY Id_Paciente, Id_Establecimiento, Fecha_Atencion
     ),
+    -- DENOMINADOR: APN + TAMIZAJE (mismo establecimiento)
     DENOMINADOR AS (
         SELECT 
             A.Id_Paciente,
             A.Id_Establecimiento,
             A.Fecha_APN,
-            T.Fecha_Tamizaje,
+            MIN(T.Fecha_Tamizaje) AS Fecha_Tamizaje,
             1 AS DENOMINADOR
         FROM APN A
         INNER JOIN TAMIZAJE T 
             ON T.Id_Paciente = A.Id_Paciente 
             AND T.Id_Establecimiento = A.Id_Establecimiento
-        GROUP BY A.Id_Paciente, A.Id_Establecimiento, A.Fecha_APN, T.Fecha_Tamizaje
+        GROUP BY A.Id_Paciente, A.Id_Establecimiento, A.Fecha_APN
     ),
+    -- NUMERADOR: DENOMINADOR + POSITIVO (mismo día que APN)
     NUMERADOR AS (
         SELECT 
             D.Id_Paciente,
@@ -401,41 +400,40 @@ function queryVI0101(f_i, f_f) {
             D.DENOMINADOR,
             CASE 
                 WHEN P.Id_Paciente IS NOT NULL 
-                 AND P.Fecha_Positivo = D.Fecha_APN
+                 AND DATE(P.Fecha_Positivo) = DATE(D.Fecha_APN)
                 THEN 1 
                 ELSE 0 
-            END AS NUMERADOR
+            END AS NUMERADOR,
+            P.Fecha_Positivo
         FROM DENOMINADOR D
         LEFT JOIN POSITIVO P 
             ON P.Id_Paciente = D.Id_Paciente 
             AND P.Id_Establecimiento = D.Id_Establecimiento
-            AND P.Fecha_Positivo = D.Fecha_APN
     )
     SELECT 
         P.Numero_Documento AS DNI_PACIENTE,
         P.Apellido_Paterno_Paciente || ' ' || P.Apellido_Materno_Paciente || ' ' || P.Nombres_Paciente AS PACIENTE,
         N.Fecha_APN AS "FECHA APN(Z34%-Z35%)",
         N.Fecha_Tamizaje AS "FECHA TAMIZAJE VIOLENCIA",
-        MAX(POS.Fecha_Positivo) AS "FECHA POSITIVO",
-        MAX(N.DENOMINADOR) AS DENOMINADOR,
-        MAX(N.NUMERADOR) AS NUMERADOR
+        N.Fecha_Positivo AS "FECHA POSITIVO",
+        N.DENOMINADOR,
+        N.NUMERADOR
     FROM NUMERADOR N
     INNER JOIN MaestroPaciente P 
         ON P.Id_Paciente = N.Id_Paciente
-    LEFT JOIN POSITIVO POS
-        ON POS.Id_Paciente = N.Id_Paciente
-        AND POS.Id_Establecimiento = N.Id_Establecimiento
-        AND POS.Fecha_Positivo = N.Fecha_APN
     GROUP BY 
         P.Numero_Documento,
         PACIENTE,
         N.Fecha_APN,
-        N.Fecha_Tamizaje
+        N.Fecha_Tamizaje,
+        N.Fecha_Positivo,
+        N.DENOMINADOR,
+        N.NUMERADOR
     ORDER BY N.Fecha_APN`;
 }
 
 // ============================================================
-// QUERY VI-01.02 (CORREGIDA)
+// QUERY VI-01.02 - VERSIÓN CORREGIDA
 // ============================================================
 function queryVI0102(f_i, f_f) {
     return `WITH APN AS (
@@ -443,90 +441,158 @@ function queryVI0102(f_i, f_f) {
         FROM NominalTrama 
         WHERE Fecha_Atencion BETWEEN '${f_i}' AND '${f_f}'
           AND Codigo_Item IN ('Z3491','Z3492','Z3493','Z3591','Z3592','Z3593')
-        GROUP BY Id_Paciente, Id_Establecimiento, Fecha_Atencion
     ),
     TAMIZAJE AS (
-        SELECT Id_Paciente, Id_Establecimiento, MIN(Fecha_Atencion) AS Fecha_Tamizaje
+        SELECT Id_Paciente, Id_Establecimiento, Fecha_Atencion AS Fecha_Tamizaje
         FROM NominalTrama WHERE Codigo_Item = '96150.01'
-        GROUP BY Id_Paciente, Id_Establecimiento
     ),
     VIOLENCIA AS (
-        SELECT Id_Paciente, Id_Establecimiento, MIN(Fecha_Atencion) AS Fecha_R456
+        SELECT Id_Paciente, Id_Establecimiento, Fecha_Atencion AS Fecha_R456
         FROM NominalTrama WHERE Codigo_Item = 'R456' AND Tipo_Diagnostico = 'D'
-        GROUP BY Id_Paciente, Id_Establecimiento
     ),
     DX AS (
-        SELECT V.Id_Paciente, V.Id_Establecimiento, MIN(N.Fecha_Atencion) AS Fecha_DX
-        FROM VIOLENCIA V INNER JOIN NominalTrama N ON N.Id_Paciente = V.Id_Paciente
-        AND (N.Codigo_Item IN ('T740','T741','T742','T743','T748','T749')
-        OR N.Codigo_Item LIKE 'Y04%' OR N.Codigo_Item LIKE 'Y05%'
-        OR N.Codigo_Item LIKE 'Y06%' OR N.Codigo_Item LIKE 'Y07%' OR N.Codigo_Item LIKE 'Y08%')
-        AND N.Tipo_Diagnostico IN ('D','P')
-        AND julianday(N.Fecha_Atencion) - julianday(V.Fecha_R456) BETWEEN 0 AND 15
-        GROUP BY V.Id_Paciente, V.Id_Establecimiento
+        SELECT 
+            V.Id_Paciente, 
+            V.Id_Establecimiento, 
+            V.Fecha_R456,
+            MIN(N.Fecha_Atencion) AS Fecha_DX
+        FROM VIOLENCIA V 
+        INNER JOIN NominalTrama N 
+            ON N.Id_Paciente = V.Id_Paciente
+            AND N.Id_Establecimiento = V.Id_Establecimiento
+            AND (N.Codigo_Item IN ('T740','T741','T742','T743','T748','T749')
+                OR N.Codigo_Item LIKE 'Y04%' OR N.Codigo_Item LIKE 'Y05%'
+                OR N.Codigo_Item LIKE 'Y06%' OR N.Codigo_Item LIKE 'Y07%' 
+                OR N.Codigo_Item LIKE 'Y08%')
+            AND N.Tipo_Diagnostico IN ('D','P')
+            AND julianday(N.Fecha_Atencion) - julianday(V.Fecha_R456) BETWEEN 0 AND 15
+        GROUP BY V.Id_Paciente, V.Id_Establecimiento, V.Fecha_R456
     ),
     DIAG_VISITA AS (
-        SELECT DISTINCT Id_Paciente, Id_Establecimiento, Fecha_Atencion AS Fecha_Visita
-        FROM NominalTrama WHERE (Codigo_Item IN ('T740','T741','T742','T743','T748','T749')
-        OR Codigo_Item LIKE 'Y04%' OR Codigo_Item LIKE 'Y05%'
-        OR Codigo_Item LIKE 'Y06%' OR Codigo_Item LIKE 'Y07%' OR Codigo_Item LIKE 'Y08%')
+        SELECT DISTINCT 
+            Id_Paciente, 
+            Id_Establecimiento, 
+            Fecha_Atencion AS Fecha_Visita
+        FROM NominalTrama 
+        WHERE (Codigo_Item IN ('T740','T741','T742','T743','T748','T749')
+            OR Codigo_Item LIKE 'Y04%' OR Codigo_Item LIKE 'Y05%'
+            OR Codigo_Item LIKE 'Y06%' OR Codigo_Item LIKE 'Y07%' 
+            OR Codigo_Item LIKE 'Y08%')
         AND Tipo_Diagnostico IN ('D','P','R')
     ),
     CSM_RAW AS (
-        SELECT N.Id_Paciente, N.Id_Establecimiento, N.Fecha_Atencion AS Fecha_CSM
-        FROM NominalTrama N INNER JOIN DIAG_VISITA DV ON DV.Id_Paciente = N.Id_Paciente
-        AND DV.Id_Establecimiento = N.Id_Establecimiento AND DV.Fecha_Visita = N.Fecha_Atencion
+        SELECT 
+            N.Id_Paciente, 
+            N.Id_Establecimiento, 
+            N.Fecha_Atencion AS Fecha_CSM
+        FROM NominalTrama N 
+        INNER JOIN DIAG_VISITA DV 
+            ON DV.Id_Paciente = N.Id_Paciente
+            AND DV.Id_Establecimiento = N.Id_Establecimiento
+            AND DV.Fecha_Visita = N.Fecha_Atencion
         WHERE N.Codigo_Item IN ('99207','99214.06','99215')
-        GROUP BY N.Id_Paciente, N.Id_Establecimiento, N.Fecha_Atencion
     ),
     INTERV_RAW AS (
-        SELECT N.Id_Paciente, N.Id_Establecimiento, N.Fecha_Atencion AS Fecha_INT
-        FROM NominalTrama N INNER JOIN DIAG_VISITA DV ON DV.Id_Paciente = N.Id_Paciente
-        AND DV.Id_Establecimiento = N.Id_Establecimiento AND DV.Fecha_Visita = N.Fecha_Atencion
-        WHERE N.Codigo_Item = '99207.01' OR N.Codigo_Item LIKE '90806%' OR N.Codigo_Item LIKE '90834%'
-        OR N.Codigo_Item LIKE '90860%'
-        GROUP BY N.Id_Paciente, N.Id_Establecimiento, N.Fecha_Atencion
+        SELECT 
+            N.Id_Paciente, 
+            N.Id_Establecimiento, 
+            N.Fecha_Atencion AS Fecha_INT
+        FROM NominalTrama N 
+        INNER JOIN DIAG_VISITA DV 
+            ON DV.Id_Paciente = N.Id_Paciente
+            AND DV.Id_Establecimiento = N.Id_Establecimiento
+            AND DV.Fecha_Visita = N.Fecha_Atencion
+        WHERE N.Codigo_Item = '99207.01' 
+           OR N.Codigo_Item LIKE '90806%' 
+           OR N.Codigo_Item LIKE '90834%'
+           OR N.Codigo_Item LIKE '90860%'
     ),
     CSM_PRIMERA AS (
-        SELECT C.Id_Paciente, MIN(C.Fecha_CSM) AS Primera_CSM
-        FROM CSM_RAW C INNER JOIN DX D ON D.Id_Paciente = C.Id_Paciente
+        SELECT 
+            C.Id_Paciente, 
+            MIN(C.Fecha_CSM) AS Primera_CSM
+        FROM CSM_RAW C 
+        INNER JOIN DX D 
+            ON D.Id_Paciente = C.Id_Paciente
+            AND D.Id_Establecimiento = C.Id_Establecimiento
         WHERE julianday(C.Fecha_CSM) - julianday(D.Fecha_DX) BETWEEN 0 AND 30
         GROUP BY C.Id_Paciente
     ),
     CSM_OK AS (
         SELECT DISTINCT C.Id_Paciente
-        FROM CSM_RAW C INNER JOIN CSM_PRIMERA P ON P.Id_Paciente = C.Id_Paciente
+        FROM CSM_RAW C 
+        INNER JOIN CSM_PRIMERA P 
+            ON P.Id_Paciente = C.Id_Paciente
         WHERE julianday(C.Fecha_CSM) - julianday(P.Primera_CSM) BETWEEN 7 AND 30
     ),
     INTERV_ORDENADA AS (
-        SELECT I.Id_Paciente, I.Fecha_INT, D.Fecha_DX,
+        SELECT 
+            I.Id_Paciente, 
+            I.Fecha_INT, 
+            D.Fecha_DX,
             LAG(I.Fecha_INT) OVER (PARTITION BY I.Id_Paciente ORDER BY I.Fecha_INT) AS Fecha_Prev
-        FROM INTERV_RAW I INNER JOIN DX D ON D.Id_Paciente = I.Id_Paciente
+        FROM INTERV_RAW I 
+        INNER JOIN DX D 
+            ON D.Id_Paciente = I.Id_Paciente
+            AND D.Id_Establecimiento = I.Id_Establecimiento
     ),
     INTERV_FLAGGED AS (
-        SELECT *, CASE WHEN Fecha_Prev IS NULL AND julianday(Fecha_INT) - julianday(Fecha_DX) BETWEEN 0 AND 30 THEN 0
-        WHEN Fecha_Prev IS NOT NULL AND julianday(Fecha_INT) - julianday(Fecha_Prev) BETWEEN 7 AND 30 THEN 0 ELSE 1 END AS ROMPE_CADENA
+        SELECT 
+            *,
+            CASE 
+                WHEN Fecha_Prev IS NULL 
+                 AND julianday(Fecha_INT) - julianday(Fecha_DX) BETWEEN 0 AND 30 
+                THEN 0
+                WHEN Fecha_Prev IS NOT NULL 
+                 AND julianday(Fecha_INT) - julianday(Fecha_Prev) BETWEEN 7 AND 30 
+                THEN 0 
+                ELSE 1 
+            END AS ROMPE_CADENA
         FROM INTERV_ORDENADA
     ),
     INTERV_GRUPO AS (
-        SELECT *, SUM(ROMPE_CADENA) OVER (PARTITION BY Id_Paciente ORDER BY Fecha_INT) AS GRUPO_CADENA
+        SELECT 
+            *,
+            SUM(ROMPE_CADENA) OVER (PARTITION BY Id_Paciente ORDER BY Fecha_INT) AS GRUPO_CADENA
         FROM INTERV_FLAGGED
     ),
     INTERV_CADENA_VALIDA AS (
-        SELECT Id_Paciente, GRUPO_CADENA, COUNT(*) AS N_INTERVENCIONES
-        FROM INTERV_GRUPO GROUP BY Id_Paciente, GRUPO_CADENA HAVING COUNT(*) >= 6
+        SELECT 
+            Id_Paciente, 
+            GRUPO_CADENA, 
+            COUNT(*) AS N_INTERVENCIONES
+        FROM INTERV_GRUPO 
+        GROUP BY Id_Paciente, GRUPO_CADENA 
+        HAVING COUNT(*) >= 6
     ),
     INTERV_OK AS (
         SELECT DISTINCT Id_Paciente FROM INTERV_CADENA_VALIDA
     ),
     RESULTADO AS (
-        SELECT A.Id_Paciente, A.Id_Establecimiento, A.Fecha_APN, 1 AS DENOMINADOR,
-            CASE WHEN CO.Id_Paciente IS NOT NULL AND IO.Id_Paciente IS NOT NULL THEN 1 ELSE 0 END AS NUMERADOR
-        FROM APN A INNER JOIN TAMIZAJE T ON T.Id_Paciente = A.Id_Paciente AND T.Id_Establecimiento = A.Id_Establecimiento
-        INNER JOIN VIOLENCIA V ON V.Id_Paciente = A.Id_Paciente AND V.Id_Establecimiento = A.Id_Establecimiento
-        INNER JOIN DX D ON D.Id_Paciente = A.Id_Paciente AND D.Id_Establecimiento = A.Id_Establecimiento
-        LEFT JOIN CSM_OK CO ON CO.Id_Paciente = A.Id_Paciente
-        LEFT JOIN INTERV_OK IO ON IO.Id_Paciente = A.Id_Paciente
+        SELECT 
+            A.Id_Paciente, 
+            A.Id_Establecimiento, 
+            A.Fecha_APN, 
+            1 AS DENOMINADOR,
+            CASE 
+                WHEN CO.Id_Paciente IS NOT NULL AND IO.Id_Paciente IS NOT NULL 
+                THEN 1 
+                ELSE 0 
+            END AS NUMERADOR
+        FROM APN A
+        INNER JOIN TAMIZAJE T 
+            ON T.Id_Paciente = A.Id_Paciente 
+            AND T.Id_Establecimiento = A.Id_Establecimiento
+        INNER JOIN VIOLENCIA V 
+            ON V.Id_Paciente = A.Id_Paciente 
+            AND V.Id_Establecimiento = A.Id_Establecimiento
+        INNER JOIN DX D 
+            ON D.Id_Paciente = A.Id_Paciente 
+            AND D.Id_Establecimiento = A.Id_Establecimiento
+        LEFT JOIN CSM_OK CO 
+            ON CO.Id_Paciente = A.Id_Paciente
+        LEFT JOIN INTERV_OK IO 
+            ON IO.Id_Paciente = A.Id_Paciente
     )
     SELECT 
         P.Id_Paciente,
@@ -599,8 +665,90 @@ function exportToExcel() {
     
     try {
         const wb = XLSX.utils.book_new();
+        
+        // Preparar datos con formato
         const data = state.resultado.map(row => ({...row}));
-        const ws = XLSX.utils.json_to_sheet(data);
+        const columns = Object.keys(data[0] || {});
+        
+        // Crear hoja
+        const wsData = [
+            ['REPORTE NOMINAL DE PACIENTES ÚNICOS - ' + document.getElementById('indicadorSelect').value],
+            ['Pacientes únicos totales: ' + state.resumen.total + ' | Fecha proceso: ' + new Date().toLocaleString()],
+            ['RESUMEN -> Denominador: ' + state.resumen.denominador + ' | Numerador: ' + state.resumen.numerador + ' | % Avance: ' + state.resumen.porcentaje.toFixed(2) + '%'],
+            [],
+            [],
+            columns,
+            ...data.map(row => columns.map(col => row[col] !== undefined ? row[col] : ''))
+        ];
+        
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        
+        // Anchos de columna
+        ws['!cols'] = columns.map(col => ({
+            wch: Math.max(col.length * 1.2, 15)
+        }));
+        
+        // Fusiones
+        const merges = [];
+        for (let i = 0; i < 4; i++) {
+            merges.push({ s: { r: i, c: 0 }, e: { r: i, c: columns.length - 1 } });
+        }
+        ws['!merges'] = merges;
+        
+        // Estilos usando xlsx-style
+        try {
+            // Título
+            if (ws['A1']) {
+                ws['A1'].s = {
+                    font: { bold: true, size: 14, color: { rgb: "1B4F72" } },
+                    alignment: { horizontal: "center", vertical: "center" }
+                };
+            }
+            
+            // Resumen
+            if (ws['A3']) {
+                ws['A3'].s = {
+                    font: { bold: true, color: { rgb: "B7950B" } },
+                    fill: { fgColor: { rgb: "FEF9E7" } },
+                    alignment: { horizontal: "center", vertical: "center" }
+                };
+            }
+            
+            // Encabezados (fila 5)
+            const headerRow = 5;
+            columns.forEach((col, idx) => {
+                const cellRef = XLSX.utils.encode_cell({ r: headerRow, c: idx });
+                if (ws[cellRef]) {
+                    ws[cellRef].s = {
+                        font: { bold: true, color: { rgb: "FFFFFF" } },
+                        fill: { fgColor: { rgb: "1B4F72" } },
+                        alignment: { horizontal: "center", vertical: "center" }
+                    };
+                }
+            });
+            
+            // Numerador = 1 (verde)
+            const numIdx = columns.indexOf('NUMERADOR');
+            if (numIdx !== -1) {
+                data.forEach((row, rowIdx) => {
+                    if (row.NUMERADOR === 1) {
+                        const cellRef = XLSX.utils.encode_cell({ 
+                            r: headerRow + 1 + rowIdx, 
+                            c: numIdx 
+                        });
+                        if (ws[cellRef]) {
+                            ws[cellRef].s = {
+                                fill: { fgColor: { rgb: "C6EFCE" } },
+                                font: { bold: true, color: { rgb: "006100" } }
+                            };
+                        }
+                    }
+                });
+            }
+        } catch (e) {
+            // Si no soporta estilos, continúa sin ellos
+            console.log('Estilos no disponibles, continuando sin formato');
+        }
         
         XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
         
@@ -614,7 +762,7 @@ function exportToExcel() {
         link.click();
         URL.revokeObjectURL(link.href);
         
-        addLog('✅ Reporte exportado a Excel');
+        addLog('✅ Reporte exportado a Excel con formato premium');
     } catch (error) {
         addLog('❌ Error al exportar: ' + error.message);
         alert('Error al exportar: ' + error.message);
