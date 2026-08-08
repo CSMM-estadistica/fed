@@ -1,0 +1,1958 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>VI-01 · Violencia contra la Mujer</title>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Librerías -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <style>
+        /* ============================================================
+           RESET Y VARIABLES
+           ============================================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #0F2B4B;
+            --primary-light: #1B4F72;
+            --primary-gradient: linear-gradient(135deg, #0F2B4B 0%, #1B4F72 50%, #2E86C1 100%);
+            --accent: #F39C12;
+            --accent-light: #F1C40F;
+            --success: #2ECC71;
+            --danger: #E74C3C;
+            --warning: #F39C12;
+            --bg: #F0F4F8;
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --shadow: 0 20px 60px rgba(15, 43, 75, 0.15);
+            --shadow-hover: 0 30px 80px rgba(15, 43, 75, 0.25);
+            --radius: 20px;
+            --radius-sm: 12px;
+            --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            min-height: 100vh;
+            padding: 24px;
+            background-image: 
+                radial-gradient(ellipse at 10% 20%, rgba(46, 134, 193, 0.05) 0%, transparent 60%),
+                radial-gradient(ellipse at 90% 80%, rgba(15, 43, 75, 0.05) 0%, transparent 60%);
+        }
+
+        /* ============================================================
+           SCROLLBAR
+           ============================================================ */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 43, 75, 0.05);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--primary-gradient);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-light);
+        }
+
+        /* ============================================================
+           CONTAINER
+           ============================================================ */
+        .app-container {
+            max-width: 1100px;
+            margin: 0 auto;
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ============================================================
+           HEADER - IMPACTANTE
+           ============================================================ */
+        .app-header {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 32px 40px;
+            border-radius: var(--radius);
+            margin-bottom: 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(15, 43, 75, 0.3);
+        }
+
+        .app-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 60%;
+            height: 200%;
+            background: radial-gradient(ellipse, rgba(255, 255, 255, 0.08) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .app-header::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--accent), var(--accent-light), var(--accent));
+            opacity: 0.6;
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            z-index: 1;
+        }
+
+        .header-icon-wrapper {
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header-icon {
+            font-size: 32px;
+            color: var(--accent-light);
+        }
+
+        .header-text h1 {
+            font-size: 32px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            line-height: 1.1;
+        }
+
+        .header-text h1 span {
+            color: var(--accent-light);
+        }
+
+        .header-text .subtitle {
+            font-size: 16px;
+            opacity: 0.85;
+            font-weight: 400;
+            margin-top: 2px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .header-text .subtitle i {
+            font-size: 14px;
+        }
+
+        .header-badges {
+            display: flex;
+            gap: 10px;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            padding: 6px 18px;
+            border-radius: 50px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .badge-accent {
+            background: var(--accent);
+            color: #0F2B4B;
+            border-color: var(--accent);
+        }
+
+        /* ============================================================
+           CARDS
+           ============================================================ */
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 24px;
+            overflow: hidden;
+            transition: var(--transition);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .card:hover {
+            box-shadow: var(--shadow-hover);
+            transform: translateY(-2px);
+        }
+
+        .card-header {
+            padding: 20px 28px;
+            background: linear-gradient(135deg, rgba(15, 43, 75, 0.03), rgba(46, 134, 193, 0.03));
+            border-bottom: 1px solid rgba(15, 43, 75, 0.06);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .card-header .icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            background: var(--primary-gradient);
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .card-header h2 {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--primary);
+            flex: 1;
+            letter-spacing: -0.3px;
+        }
+
+        .card-header .badge-count {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 2px 14px;
+            border-radius: 50px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .card-body {
+            padding: 24px 28px;
+        }
+
+        /* ============================================================
+           FILE UPLOAD - MODERNO
+           ============================================================ */
+        .file-upload-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        @media (max-width: 700px) {
+            .file-upload-group {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .file-upload-box {
+            border: 2px dashed rgba(15, 43, 75, 0.15);
+            border-radius: var(--radius-sm);
+            padding: 20px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            transition: var(--transition);
+            background: rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+            position: relative;
+            min-height: 80px;
+        }
+
+        .file-upload-box:hover {
+            border-color: var(--primary-light);
+            background: rgba(46, 134, 193, 0.04);
+            transform: translateY(-2px);
+        }
+
+        .file-upload-box.loaded {
+            border-color: var(--success);
+            background: rgba(46, 204, 113, 0.06);
+        }
+
+        .file-upload-box .file-icon {
+            font-size: 32px;
+            color: rgba(15, 43, 75, 0.3);
+            flex-shrink: 0;
+            transition: var(--transition);
+        }
+
+        .file-upload-box.loaded .file-icon {
+            color: var(--success);
+        }
+
+        .file-upload-box .file-info {
+            flex: 1;
+        }
+
+        .file-upload-box .file-label {
+            display: block;
+            font-weight: 600;
+            font-size: 15px;
+            color: var(--primary);
+        }
+
+        .file-upload-box .file-status {
+            display: block;
+            font-size: 13px;
+            color: #999;
+            font-weight: 400;
+        }
+
+        .file-upload-box .file-status.loaded {
+            color: var(--success);
+        }
+
+        .file-upload-box .file-count {
+            display: block;
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 2px;
+        }
+
+        .file-upload-box .file-input {
+            display: none;
+        }
+
+        .file-upload-box .btn-upload {
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+
+        .file-upload-box .btn-upload:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 25px rgba(15, 43, 75, 0.25);
+        }
+
+        .file-upload-box.loaded .btn-upload {
+            background: var(--success);
+        }
+
+        /* ============================================================
+           FILE SUMMARY
+           ============================================================ */
+        .file-summary {
+            display: flex;
+            gap: 32px;
+            margin-top: 18px;
+            padding-top: 18px;
+            border-top: 1px solid rgba(15, 43, 75, 0.06);
+            flex-wrap: wrap;
+        }
+
+        .summary-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .summary-item .summary-label {
+            font-size: 14px;
+            color: #999;
+            font-weight: 500;
+        }
+
+        .summary-item .summary-value {
+            font-weight: 700;
+            font-size: 18px;
+            color: var(--primary);
+            background: rgba(15, 43, 75, 0.06);
+            padding: 2px 14px;
+            border-radius: 8px;
+        }
+
+        /* ============================================================
+           CONFIGURACIÓN
+           ============================================================ */
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        @media (max-width: 600px) {
+            .config-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .config-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .config-item.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .config-item label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .config-item label i {
+            color: var(--primary-light);
+            font-size: 14px;
+        }
+
+        .config-item input,
+        .config-item select {
+            padding: 14px 16px;
+            border: 2px solid rgba(15, 43, 75, 0.08);
+            border-radius: var(--radius-sm);
+            font-size: 15px;
+            font-family: 'Inter', sans-serif;
+            transition: var(--transition);
+            background: white;
+            width: 100%;
+            color: var(--primary);
+            font-weight: 500;
+        }
+
+        .config-item input:focus,
+        .config-item select:focus {
+            outline: none;
+            border-color: var(--primary-light);
+            box-shadow: 0 0 0 4px rgba(27, 79, 114, 0.1);
+        }
+
+        /* ============================================================
+           BOTÓN PRINCIPAL - IMPACTANTE
+           ============================================================ */
+        .btn-primary {
+            width: 100%;
+            padding: 20px 28px;
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 20px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            margin-bottom: 24px;
+            position: relative;
+            overflow: hidden;
+            min-height: 72px;
+            letter-spacing: -0.3px;
+            box-shadow: 0 10px 40px rgba(15, 43, 75, 0.25);
+        }
+
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+            transition: 0.6s;
+        }
+
+        .btn-primary:hover:not(:disabled)::before {
+            left: 100%;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 20px 60px rgba(15, 43, 75, 0.35);
+        }
+
+        .btn-primary:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-primary i {
+            font-size: 22px;
+        }
+
+        /* ============================================================
+           PROGRESS
+           ============================================================ */
+        .progress-container {
+            background: white;
+            border-radius: var(--radius);
+            padding: 20px 28px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow);
+            position: relative;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .progress-track {
+            height: 8px;
+            background: rgba(15, 43, 75, 0.06);
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-track .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--primary-gradient);
+            border-radius: 10px;
+            transition: width 0.6s ease;
+            position: relative;
+        }
+
+        .progress-track .progress-fill::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 0;
+            width: 30px;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4));
+            border-radius: 10px;
+        }
+
+        .progress-text {
+            position: absolute;
+            right: 28px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        /* ============================================================
+           LOG
+           ============================================================ */
+        .log-container {
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Inter', monospace;
+            font-size: 13px;
+            background: #0F1A2E;
+            color: #00FF88;
+            padding: 16px 20px;
+            border-radius: var(--radius-sm);
+            line-height: 1.8;
+        }
+
+        .log-container .log-entry {
+            padding: 2px 0;
+            opacity: 0.9;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .log-container .log-entry .timestamp {
+            color: rgba(255, 255, 255, 0.3);
+            margin-right: 10px;
+        }
+
+        .log-container .log-entry .emoji {
+            margin-right: 6px;
+        }
+
+        .btn-clear-log {
+            background: rgba(15, 43, 75, 0.06);
+            border: none;
+            color: #999;
+            cursor: pointer;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            transition: var(--transition);
+        }
+
+        .btn-clear-log:hover {
+            background: rgba(15, 43, 75, 0.1);
+            color: var(--primary);
+        }
+
+        /* ============================================================
+           RESULTADOS
+           ============================================================ */
+        .resumen-box {
+            background: linear-gradient(135deg, #FFF8E1, #FFFDE7);
+            border: 1px solid rgba(243, 156, 18, 0.2);
+            border-radius: var(--radius-sm);
+            padding: 20px 24px;
+            margin-bottom: 20px;
+        }
+
+        .resumen-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        @media (max-width: 500px) {
+            .resumen-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .resumen-item {
+            text-align: center;
+            padding: 8px 0;
+        }
+
+        .resumen-item .label {
+            display: block;
+            font-size: 12px;
+            color: #999;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .resumen-item .value {
+            display: block;
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--primary);
+            margin-top: 2px;
+        }
+
+        .resumen-item .value.success {
+            color: var(--success);
+        }
+        .resumen-item .value.warning {
+            color: var(--warning);
+        }
+        .resumen-item .value.danger {
+            color: var(--danger);
+        }
+
+        /* ============================================================
+           TABLA
+           ============================================================ */
+        .table-container {
+            overflow-x: auto;
+            border-radius: var(--radius-sm);
+            border: 1px solid rgba(15, 43, 75, 0.06);
+        }
+
+        .table-wrapper {
+            max-height: 450px;
+            overflow-y: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            min-width: 700px;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        thead th {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 14px 16px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+        }
+
+        tbody tr {
+            transition: var(--transition);
+        }
+
+        tbody tr:nth-child(even) {
+            background: rgba(15, 43, 75, 0.02);
+        }
+
+        tbody tr:hover {
+            background: rgba(46, 134, 193, 0.06);
+        }
+
+        tbody td {
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(15, 43, 75, 0.04);
+            color: #333;
+        }
+
+        tbody td.numerador-1 {
+            background: rgba(46, 204, 113, 0.15) !important;
+            font-weight: 700;
+            color: #1a7a42;
+        }
+
+        tbody td.denominador-1 {
+            background: rgba(46, 134, 193, 0.08) !important;
+            font-weight: 600;
+        }
+
+        .table-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            font-size: 14px;
+            color: #999;
+            border-top: 1px solid rgba(15, 43, 75, 0.06);
+        }
+
+        /* ============================================================
+           BOTÓN EXPORTAR
+           ============================================================ */
+        .btn-export {
+            background: linear-gradient(135deg, #2ECC71, #27AE60);
+            color: white;
+            border: none;
+            padding: 10px 22px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-export:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(46, 204, 113, 0.3);
+        }
+
+        /* ============================================================
+           FOOTER
+           ============================================================ */
+        .app-footer {
+            text-align: center;
+            padding: 24px;
+            color: #aaa;
+            font-size: 14px;
+            border-top: 1px solid rgba(15, 43, 75, 0.06);
+            margin-top: 16px;
+        }
+
+        .app-footer .footer-small {
+            font-size: 12px;
+            opacity: 0.6;
+            margin-top: 4px;
+        }
+
+        .app-footer .footer-heart {
+            color: var(--danger);
+        }
+
+        /* ============================================================
+           RESPONSIVE
+           ============================================================ */
+        @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
+
+            .app-header {
+                padding: 24px;
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .header-content {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .header-text h1 {
+                font-size: 24px;
+            }
+
+            .header-text .subtitle {
+                font-size: 14px;
+                justify-content: center;
+            }
+
+            .header-badges {
+                justify-content: center;
+            }
+
+            .card-header {
+                padding: 16px 20px;
+            }
+
+            .card-body {
+                padding: 16px 20px;
+            }
+
+            .btn-primary {
+                font-size: 17px;
+                padding: 16px 20px;
+                min-height: 60px;
+            }
+
+            .resumen-item .value {
+                font-size: 22px;
+            }
+
+            .file-upload-box {
+                padding: 16px;
+                min-height: 60px;
+            }
+
+            .file-upload-box .file-icon {
+                font-size: 24px;
+            }
+
+            .file-upload-box .btn-upload {
+                padding: 8px 14px;
+                font-size: 12px;
+            }
+
+            .config-item input,
+            .config-item select {
+                padding: 12px 14px;
+                font-size: 14px;
+            }
+
+            .progress-text {
+                font-size: 14px;
+                right: 16px;
+            }
+
+            .log-container {
+                font-size: 12px;
+                padding: 12px 16px;
+                max-height: 150px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .resumen-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+
+            .resumen-item .value {
+                font-size: 18px;
+            }
+
+            .file-summary {
+                gap: 16px;
+            }
+
+            .summary-item .summary-value {
+                font-size: 15px;
+            }
+
+            table {
+                font-size: 12px;
+                min-width: 500px;
+            }
+
+            thead th,
+            tbody td {
+                padding: 8px 10px;
+            }
+
+            .btn-export {
+                font-size: 12px;
+                padding: 8px 14px;
+            }
+        }
+
+        /* ============================================================
+           ANIMACIONES
+           ============================================================ */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .loading-dots::after {
+            content: '';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+            0% { content: ''; }
+            25% { content: '.'; }
+            50% { content: '..'; }
+            75% { content: '...'; }
+            100% { content: ''; }
+        }
+
+        .glow {
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from { box-shadow: 0 0 20px rgba(46, 134, 193, 0.1); }
+            to { box-shadow: 0 0 40px rgba(46, 134, 193, 0.2); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+
+    <!-- ==========================================================
+    HEADER
+    ========================================================== -->
+    <header class="app-header">
+        <div class="header-content">
+            <div class="header-icon-wrapper">
+                <i class="fas fa-shield-alt header-icon"></i>
+            </div>
+            <div class="header-text">
+                <h1>VI-01 <span>·</span> Violencia</h1>
+                <div class="subtitle">
+                    <i class="fas fa-venus-mars"></i>
+                    Contra la Mujer · Indicador de Salud
+                </div>
+            </div>
+        </div>
+        <div class="header-badges">
+            <span class="badge"><i class="fas fa-code-branch"></i> v4.0</span>
+            <span class="badge badge-accent"><i class="fas fa-bolt"></i> PRO</span>
+            <span class="badge"><i class="fas fa-shield"></i> HIPAA</span>
+        </div>
+    </header>
+
+    <!-- ==========================================================
+    ARCHIVOS
+    ========================================================== -->
+    <section class="card">
+        <div class="card-header">
+            <div class="icon"><i class="fas fa-folder-open"></i></div>
+            <h2>Archivos de Datos</h2>
+            <span class="badge-count" id="fileCountBadge">0</span>
+        </div>
+        <div class="card-body">
+            <div class="file-upload-group">
+                <!-- NominalTrama -->
+                <div class="file-upload-box" id="nominalUpload">
+                    <i class="fas fa-file-csv file-icon"></i>
+                    <div class="file-info">
+                        <span class="file-label">📊 NominalTrama</span>
+                        <span class="file-status" id="nominalStatus">No cargado</span>
+                        <span class="file-count" id="nominalFileCount"></span>
+                    </div>
+                    <input type="file" id="nominalFile" accept=".csv" class="file-input" multiple>
+                    <button class="btn-upload" onclick="document.getElementById('nominalFile').click()">
+                        <i class="fas fa-upload"></i> Cargar
+                    </button>
+                </div>
+
+                <!-- MaestroPaciente -->
+                <div class="file-upload-box" id="maestroUpload">
+                    <i class="fas fa-user-md file-icon"></i>
+                    <div class="file-info">
+                        <span class="file-label">👤 MaestroPaciente</span>
+                        <span class="file-status" id="maestroStatus">No cargado</span>
+                    </div>
+                    <input type="file" id="maestroFile" accept=".csv" class="file-input">
+                    <button class="btn-upload" onclick="document.getElementById('maestroFile').click()">
+                        <i class="fas fa-upload"></i> Cargar
+                    </button>
+                </div>
+            </div>
+
+            <div class="file-summary">
+                <div class="summary-item">
+                    <span class="summary-label">📁 Archivos Nominal</span>
+                    <span class="summary-value" id="nominalFileCountDisplay">0</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">📝 Registros Nominal</span>
+                    <span class="summary-value" id="nominalCount">0</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">📝 Registros Maestro</span>
+                    <span class="summary-value" id="maestroCount">0</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================================
+    CONFIGURACIÓN
+    ========================================================== -->
+    <section class="card">
+        <div class="card-header">
+            <div class="icon"><i class="fas fa-sliders-h"></i></div>
+            <h2>Configuración del Reporte</h2>
+        </div>
+        <div class="card-body">
+            <div class="config-grid">
+                <div class="config-item">
+                    <label><i class="fas fa-calendar-alt"></i> Desde</label>
+                    <input type="date" id="fechaInicio">
+                </div>
+                <div class="config-item">
+                    <label><i class="fas fa-calendar-alt"></i> Hasta</label>
+                    <input type="date" id="fechaFin">
+                </div>
+                <div class="config-item full-width">
+                    <label><i class="fas fa-chart-bar"></i> Indicador</label>
+                    <select id="indicadorSelect">
+                        <option value="VI-01.01">🟢 VI-01.01 · Tamizaje Positivo de Violencia</option>
+                        <option value="VI-01.02">🔵 VI-01.02 · Paquete Terapéutico Especializado</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================================
+    BOTÓN PRINCIPAL
+    ========================================================== -->
+    <button id="btnProcesar" class="btn-primary" disabled>
+        <i class="fas fa-rocket"></i>
+        <span>GENERAR REPORTE</span>
+        <i class="fas fa-arrow-right" style="font-size:16px;opacity:0.6;"></i>
+    </button>
+
+    <!-- ==========================================================
+    PROGRESO
+    ========================================================== -->
+    <div class="progress-container" id="progressContainer" style="display:none;">
+        <div class="progress-track">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <span class="progress-text" id="progressText">0%</span>
+    </div>
+
+    <!-- ==========================================================
+    LOG
+    ========================================================== -->
+    <section class="card" id="logCard" style="display:none;">
+        <div class="card-header">
+            <div class="icon"><i class="fas fa-terminal"></i></div>
+            <h2>Log de Procesamiento</h2>
+            <button class="btn-clear-log" onclick="clearLog()">
+                <i class="fas fa-eraser"></i> Limpiar
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="log-container" id="logContainer">
+                <div class="log-entry">
+                    <span class="timestamp">[⏳]</span>
+                    <span>Esperando procesamiento...</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================================
+    RESULTADOS
+    ========================================================== -->
+    <section class="card" id="resultadosCard" style="display:none;">
+        <div class="card-header">
+            <div class="icon"><i class="fas fa-chart-pie"></i></div>
+            <h2>Resultados del Reporte</h2>
+            <button class="btn-export" id="btnExportar" onclick="exportToExcel()">
+                <i class="fas fa-file-excel"></i> Exportar Excel
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="resumen-box" id="resumenBox"></div>
+            <div class="table-container">
+                <div class="table-wrapper" id="tableWrapper">
+                    <table id="resultTable">
+                        <thead id="tableHead"></thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+                <div class="table-controls">
+                    <span id="rowCount">0 filas</span>
+                    <span style="color:#aaa;font-size:12px;">
+                        <i class="fas fa-arrow-up" style="color:var(--success);"></i> Numerador 
+                        <i class="fas fa-arrow-down" style="color:var(--primary-light);margin-left:12px;"></i> Denominador
+                    </span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================================
+    FOOTER
+    ========================================================== -->
+    <footer class="app-footer">
+        <p>
+            <i class="fas fa-heart footer-heart"></i>
+            Sistema de Indicadores de Violencia · 2026
+            <i class="fas fa-heart footer-heart"></i>
+        </p>
+        <p class="footer-small">
+            <i class="fas fa-lock"></i> Procesamiento en navegador · Sin datos enviados a servidores
+            <i class="fas fa-shield-alt" style="margin-left:12px;"></i>
+        </p>
+    </footer>
+
+</div>
+
+<!-- ============================================================
+JAVASCRIPT
+============================================================ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.1/sql-wasm.js"></script>
+<script>
+// ============================================================
+// ESTADO GLOBAL
+// ============================================================
+const state = {
+    nominalData: [],
+    maestro: null,
+    resultado: null,
+    resumen: null,
+    procesando: false,
+    columnMapping: {}
+};
+
+// ============================================================
+// INICIALIZACIÓN
+// ============================================================
+document.addEventListener('DOMContentLoaded', function() {
+    const hoy = new Date();
+    const hace6Meses = new Date();
+    hace6Meses.setMonth(hoy.getMonth() - 6);
+    
+    document.getElementById('fechaInicio').value = hace6Meses.toISOString().split('T')[0];
+    document.getElementById('fechaFin').value = hoy.toISOString().split('T')[0];
+    
+    document.getElementById('nominalFile').addEventListener('change', handleNominalFiles);
+    document.getElementById('maestroFile').addEventListener('change', handleMaestroFile);
+    document.getElementById('btnProcesar').addEventListener('click', procesar);
+});
+
+// ============================================================
+// DETECCIÓN AUTOMÁTICA DE COLUMNAS
+// ============================================================
+function detectarColumnas(primerFila) {
+    const keys = Object.keys(primerFila);
+    const mapping = {};
+    
+    const posibles = {
+        'Id_Paciente': ['id_paciente', 'idpaciente', 'paciente_id', 'pacienteid', 'id_pac', 'idpac'],
+        'Id_Establecimiento': ['id_establecimiento', 'idestablecimiento', 'establecimiento_id', 'establecid', 'id_estab'],
+        'Fecha_Atencion': ['fecha_atencion', 'fechaatencion', 'fecha_at', 'fecha', 'atencion_fecha'],
+        'Codigo_Item': ['codigo_item', 'codigoitem', 'codigo', 'item', 'cod_item', 'coditem', 'codigo_atencion', 'CODIGO', 'CODIGO_ITEM', 'Código'],
+        'Tipo_Diagnostico': ['tipo_diagnostico', 'tipodiagnostico', 'tipo_diag', 'diagnostico_tipo', 'tipo'],
+        'Anio_Actual_Paciente': ['anio_actual_paciente', 'anio_paciente', 'edad', 'anio_actual', 'edad_paciente'],
+        'Historia_Clinica': ['historia_clinica', 'historiaclinica', 'historia', 'hc', 'num_historia', 'nro_historia']
+    };
+    
+    for (const [target, alternativas] of Object.entries(posibles)) {
+        let encontrado = false;
+        for (const alt of alternativas) {
+            const match = keys.find(k => k.toLowerCase().trim() === alt.toLowerCase().trim());
+            if (match) {
+                mapping[target] = match;
+                encontrado = true;
+                break;
+            }
+        }
+        if (!encontrado) {
+            for (const alt of alternativas) {
+                const match = keys.find(k => k.toLowerCase().includes(alt.toLowerCase()) || alt.toLowerCase().includes(k.toLowerCase()));
+                if (match) {
+                    mapping[target] = match;
+                    encontrado = true;
+                    break;
+                }
+            }
+        }
+        if (!encontrado) {
+            mapping[target] = target;
+        }
+    }
+    
+    return mapping;
+}
+
+// ============================================================
+// MANEJO DE ARCHIVOS NOMINAL
+// ============================================================
+function handleNominalFiles(event) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    
+    let archivosCargados = 0;
+    let registrosTotales = 0;
+    let primerArchivo = true;
+    
+    Array.from(files).forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const result = Papa.parse(e.target.result, { 
+                    header: true, 
+                    skipEmptyLines: true,
+                    trimHeaders: true
+                });
+                
+                if (primerArchivo && result.data.length > 0) {
+                    state.columnMapping = detectarColumnas(result.data[0]);
+                    primerArchivo = false;
+                    
+                    addLog('📋 MAPEO DE COLUMNAS DETECTADO:');
+                    for (const [key, value] of Object.entries(state.columnMapping)) {
+                        addLog(`   ${key} → "${value}"`);
+                    }
+                }
+                
+                const mappedData = result.data.map(row => {
+                    const mapped = {};
+                    for (const [key, colName] of Object.entries(state.columnMapping)) {
+                        mapped[key] = row[colName] !== undefined ? row[colName] : '';
+                    }
+                    return mapped;
+                });
+                
+                state.nominalData.push({
+                    nombre: file.name,
+                    data: mappedData
+                });
+                
+                archivosCargados++;
+                registrosTotales += mappedData.length;
+                
+                document.getElementById('nominalStatus').textContent = `✅ ${archivosCargados} archivo(s) cargado(s)`;
+                document.getElementById('nominalStatus').className = 'file-status loaded';
+                document.getElementById('nominalFileCountDisplay').textContent = archivosCargados;
+                document.getElementById('nominalCount').textContent = registrosTotales;
+                document.getElementById('fileCountBadge').textContent = archivosCargados;
+                
+                const nombres = state.nominalData.map(d => d.nombre).join(', ');
+                document.getElementById('nominalFileCount').textContent = `📁 ${nombres}`;
+                
+                const box = document.getElementById('nominalUpload');
+                box.classList.add('loaded');
+                
+                addLog(`✅ Cargado: ${file.name} (${mappedData.length} registros)`);
+                addLog(`📊 Total acumulado: ${registrosTotales} registros en ${archivosCargados} archivos`);
+                
+                checkReady();
+                
+            } catch (error) {
+                addLog(`❌ Error al cargar ${file.name}: ${error.message}`);
+                alert(`Error al cargar ${file.name}: ${error.message}`);
+            }
+        };
+        reader.readAsText(file);
+    });
+}
+
+// ============================================================
+// MANEJO DE MAESTRO PACIENTE
+// ============================================================
+function handleMaestroFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const result = Papa.parse(e.target.result, { header: true, skipEmptyLines: true });
+            state.maestro = result.data;
+            
+            const box = document.getElementById('maestroUpload');
+            box.classList.add('loaded');
+            document.getElementById('maestroStatus').textContent = `✅ ${state.maestro.length} registros`;
+            document.getElementById('maestroStatus').className = 'file-status loaded';
+            document.getElementById('maestroCount').textContent = state.maestro.length;
+            
+            addLog('✅ MaestroPaciente cargado: ' + state.maestro.length + ' registros');
+            checkReady();
+        } catch (error) {
+            addLog('❌ Error: ' + error.message);
+            alert('Error: ' + error.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+// ============================================================
+// VERIFICAR LISTO
+// ============================================================
+function checkReady() {
+    const ready = state.nominalData.length > 0 && state.maestro;
+    document.getElementById('btnProcesar').disabled = !ready;
+    if (ready) {
+        const totalReg = state.nominalData.reduce((sum, d) => sum + d.data.length, 0);
+        addLog(`✅ Listo para procesar: ${state.nominalData.length} archivos, ${totalReg} registros totales`);
+    }
+}
+
+// ============================================================
+// LOG
+// ============================================================
+function addLog(message) {
+    const container = document.getElementById('logContainer');
+    document.getElementById('logCard').style.display = 'block';
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    const timestamp = new Date().toLocaleTimeString();
+    const emoji = message.match(/^[^\s]+/)?.[0] || '📌';
+    entry.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
+    container.appendChild(entry);
+    container.scrollTop = container.scrollHeight;
+}
+
+function clearLog() {
+    document.getElementById('logContainer').innerHTML = `
+        <div class="log-entry">
+            <span class="timestamp">[🗑️]</span>
+            <span>Log limpiado</span>
+        </div>
+    `;
+}
+
+// ============================================================
+// PROCESAMIENTO
+// ============================================================
+async function procesar() {
+    if (state.procesando) return;
+    if (state.nominalData.length === 0 || !state.maestro) {
+        alert('Primero cargue los archivos');
+        return;
+    }
+    
+    state.procesando = true;
+    const btn = document.getElementById('btnProcesar');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando...';
+    
+    const progressContainer = document.getElementById('progressContainer');
+    progressContainer.style.display = 'block';
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    
+    try {
+        addLog('⏳ Cargando motor SQL...');
+        await cargarSQLJS();
+        
+        addLog('⏳ Creando base de datos...');
+        const db = new SQL.Database();
+        
+        addLog('⏳ Cargando datos...');
+        updateProgress(10);
+        
+        cargarDatosNominalSQLite(db);
+        updateProgress(40);
+        
+        cargarDatosMaestroSQLite(db);
+        updateProgress(50);
+        
+        const fechaInicio = document.getElementById('fechaInicio').value;
+        const fechaFin = document.getElementById('fechaFin').value;
+        const indicador = document.getElementById('indicadorSelect').value;
+        
+        const totalRegistros = state.nominalData.reduce((sum, d) => sum + d.data.length, 0);
+        addLog(`⏳ Procesando ${totalRegistros} registros...`);
+        addLog(`⏳ ${indicador} (${fechaInicio} a ${fechaFin})`);
+        updateProgress(60);
+        
+        const query = indicador === 'VI-01.01' 
+            ? queryVI0101(fechaInicio, fechaFin)
+            : queryVI0102(fechaInicio, fechaFin);
+        
+        const resultados = db.exec(query);
+        updateProgress(80);
+        
+        if (resultados.length === 0 || resultados[0].values.length === 0) {
+            addLog('ℹ️ No se encontraron pacientes que cumplan el denominador');
+            alert('No hay resultados para el rango seleccionado');
+            state.procesando = false;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-rocket"></i> <span>GENERAR REPORTE</span> <i class="fas fa-arrow-right" style="font-size:16px;opacity:0.6;"></i>';
+            return;
+        }
+        
+        const columns = resultados[0].columns;
+        const rows = resultados[0].values;
+        
+        const df = rows.map(row => {
+            const obj = {};
+            columns.forEach((col, i) => obj[col] = row[i]);
+            return obj;
+        });
+        
+        const sumaDenominador = df.reduce((sum, r) => sum + (r.DENOMINADOR || 0), 0);
+        const sumaNumerador = df.reduce((sum, r) => sum + (r.NUMERADOR || 0), 0);
+        const porcentajeAvance = sumaDenominador > 0 ? (sumaNumerador / sumaDenominador * 100) : 0;
+        
+        state.resultado = df;
+        state.resumen = {
+            total: df.length,
+            denominador: sumaDenominador,
+            numerador: sumaNumerador,
+            porcentaje: porcentajeAvance,
+            archivos: state.nominalData.length,
+            registros: state.nominalData.reduce((sum, d) => sum + d.data.length, 0)
+        };
+        
+        updateProgress(100);
+        addLog('✅ Procesamiento completado');
+        addLog(`📊 Resultados: ${df.length} pacientes únicos`);
+        
+        mostrarResultados(df, state.resumen);
+        db.close();
+        
+    } catch (error) {
+        addLog('❌ Error: ' + error.message);
+        alert('Error: ' + error.message);
+    } finally {
+        state.procesando = false;
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-rocket"></i> <span>GENERAR REPORTE</span> <i class="fas fa-arrow-right" style="font-size:16px;opacity:0.6;"></i>';
+    }
+}
+
+function updateProgress(value) {
+    document.getElementById('progressFill').style.width = value + '%';
+    document.getElementById('progressText').textContent = value + '%';
+}
+
+// ============================================================
+// CARGA DE SQL.JS
+// ============================================================
+function cargarSQLJS() {
+    return new Promise((resolve, reject) => {
+        if (typeof SQL !== 'undefined') { resolve(); return; }
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.1/sql-wasm.js';
+        script.onload = function() {
+            if (typeof initSqlJs === 'function') {
+                initSqlJs({ locateFile: function(file) {
+                    return 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.1/' + file;
+                }}).then(SQL => { window.SQL = SQL; resolve(); }).catch(reject);
+            } else {
+                window.SQL = SQL;
+                resolve();
+            }
+        };
+        script.onerror = reject;
+        document.head.appendChild(script);
+    });
+}
+
+// ============================================================
+// CARGA DE DATOS A SQLITE
+// ============================================================
+function cargarDatosNominalSQLite(db) {
+    db.run(`CREATE TABLE NominalTrama (
+        Id_Paciente TEXT,
+        Id_Establecimiento TEXT,
+        Fecha_Atencion TEXT,
+        Codigo_Item TEXT,
+        Tipo_Diagnostico TEXT,
+        Anio_Actual_Paciente INTEGER,
+        Historia_Clinica TEXT
+    )`);
+    
+    const nominalColumns = ['Id_Paciente', 'Id_Establecimiento', 'Fecha_Atencion', 
+                           'Codigo_Item', 'Tipo_Diagnostico', 'Anio_Actual_Paciente', 
+                           'Historia_Clinica'];
+    const batchSize = 1000;
+    let totalInsertados = 0;
+    
+    state.nominalData.forEach((archivo) => {
+        const data = archivo.data;
+        addLog(`⏳ Insertando ${data.length} registros de ${archivo.nombre}...`);
+        
+        for (let i = 0; i < data.length; i += batchSize) {
+            const batch = data.slice(i, i + batchSize);
+            const placeholders = batch.map(() => `(${nominalColumns.map(() => '?').join(',')})`).join(',');
+            const values = batch.flatMap(row => nominalColumns.map(col => row[col] || ''));
+            db.run(`INSERT INTO NominalTrama VALUES ${placeholders}`, values);
+            totalInsertados += batch.length;
+        }
+        
+        addLog(`✅ ${archivo.nombre}: ${data.length} registros insertados`);
+    });
+    
+    db.run('CREATE INDEX idx_nominal_paciente ON NominalTrama(Id_Paciente)');
+    db.run('CREATE INDEX idx_nominal_fecha ON NominalTrama(Fecha_Atencion)');
+    db.run('CREATE INDEX idx_nominal_codigo ON NominalTrama(Codigo_Item)');
+    
+    addLog(`✅ Total insertado: ${totalInsertados} registros de ${state.nominalData.length} archivos`);
+}
+
+function cargarDatosMaestroSQLite(db) {
+    db.run(`CREATE TABLE MaestroPaciente (
+        Id_Paciente TEXT,
+        Numero_Documento TEXT,
+        Apellido_Paterno_Paciente TEXT,
+        Apellido_Materno_Paciente TEXT,
+        Nombres_Paciente TEXT,
+        Historia_Clinica TEXT
+    )`);
+    
+    const maestroColumns = ['Id_Paciente', 'Numero_Documento', 'Apellido_Paterno_Paciente',
+                           'Apellido_Materno_Paciente', 'Nombres_Paciente', 'Historia_Clinica'];
+    
+    const batchSize = 1000;
+    for (let i = 0; i < state.maestro.length; i += batchSize) {
+        const batch = state.maestro.slice(i, i + batchSize);
+        const placeholders = batch.map(() => `(${maestroColumns.map(() => '?').join(',')})`).join(',');
+        const values = batch.flatMap(row => maestroColumns.map(col => row[col] || ''));
+        db.run(`INSERT INTO MaestroPaciente VALUES ${placeholders}`, values);
+    }
+    
+    db.run('CREATE INDEX idx_maestro_paciente ON MaestroPaciente(Id_Paciente)');
+}
+
+// ============================================================
+// QUERY VI-01.01
+// ============================================================
+function queryVI0101(f_i, f_f) {
+    return `WITH ATENCIONES AS (
+        SELECT 
+            Id_Paciente, 
+            Id_Establecimiento, 
+            Fecha_Atencion
+        FROM NominalTrama 
+        WHERE Fecha_Atencion BETWEEN '${f_i}' AND '${f_f}'
+    ),
+    APN AS (
+        SELECT 
+            Id_Paciente, 
+            Id_Establecimiento, 
+            Fecha_Atencion AS Fecha_APN
+        FROM ATENCIONES 
+        WHERE Codigo_Item IN ('Z3491','Z3492','Z3493','Z3591','Z3592','Z3593')
+    ),
+    TAMIZAJE AS (
+        SELECT 
+            Id_Paciente, 
+            Id_Establecimiento, 
+            Fecha_Atencion AS Fecha_Tamizaje
+        FROM ATENCIONES 
+        WHERE Codigo_Item = '96150.01'
+    ),
+    POSITIVO AS (
+        SELECT 
+            Id_Paciente, 
+            Id_Establecimiento, 
+            Fecha_Atencion AS Fecha_Positivo
+        FROM ATENCIONES 
+        WHERE Codigo_Item LIKE '%R456%' 
+          AND Tipo_Diagnostico = 'D'
+    ),
+    DENOMINADOR AS (
+        SELECT 
+            A.Id_Paciente,
+            A.Id_Establecimiento,
+            A.Fecha_APN,
+            T.Fecha_Tamizaje,
+            1 AS DENOMINADOR
+        FROM APN A
+        INNER JOIN TAMIZAJE T 
+            ON T.Id_Paciente = A.Id_Paciente 
+            AND T.Id_Establecimiento = A.Id_Establecimiento
+            AND T.Fecha_Tamizaje = A.Fecha_APN
+        GROUP BY A.Id_Paciente, A.Id_Establecimiento, A.Fecha_APN, T.Fecha_Tamizaje
+    ),
+    NUMERADOR AS (
+        SELECT 
+            D.Id_Paciente,
+            D.Id_Establecimiento,
+            D.Fecha_APN,
+            D.Fecha_Tamizaje,
+            D.DENOMINADOR,
+            CASE 
+                WHEN P.Id_Paciente IS NOT NULL 
+                 AND P.Fecha_Positivo = D.Fecha_APN
+                THEN 1 
+                ELSE 0 
+            END AS NUMERADOR,
+            P.Fecha_Positivo
+        FROM DENOMINADOR D
+        LEFT JOIN POSITIVO P 
+            ON P.Id_Paciente = D.Id_Paciente 
+            AND P.Id_Establecimiento = D.Id_Establecimiento
+            AND P.Fecha_Positivo = D.Fecha_APN
+    )
+    SELECT 
+        P.Numero_Documento AS DNI_PACIENTE,
+        P.Apellido_Paterno_Paciente || ' ' || P.Apellido_Materno_Paciente || ' ' || P.Nombres_Paciente AS PACIENTE,
+        N.Fecha_APN AS "FECHA APN(Z34%-Z35%)",
+        N.Fecha_Tamizaje AS "FECHA TAMIZAJE VIOLENCIA",
+        N.Fecha_Positivo AS "FECHA POSITIVO",
+        N.DENOMINADOR,
+        N.NUMERADOR
+    FROM NUMERADOR N
+    INNER JOIN MaestroPaciente P 
+        ON P.Id_Paciente = N.Id_Paciente
+    GROUP BY 
+        P.Numero_Documento,
+        PACIENTE,
+        N.Fecha_APN,
+        N.Fecha_Tamizaje,
+        N.Fecha_Positivo,
+        N.DENOMINADOR,
+        N.NUMERADOR
+    ORDER BY N.Fecha_APN`;
+}
+
+// ============================================================
+// QUERY VI-01.02
+// ============================================================
+function queryVI0102(f_i, f_f) {
+    return `WITH APN AS (
+        SELECT Id_Paciente, Id_Establecimiento, Fecha_Atencion AS Fecha_APN
+        FROM NominalTrama 
+        WHERE Fecha_Atencion BETWEEN '${f_i}' AND '${f_f}'
+          AND Codigo_Item IN ('Z3491','Z3492','Z3493','Z3591','Z3592','Z3593')
+    ),
+    TAMIZAJE AS (
+        SELECT Id_Paciente, Id_Establecimiento, Fecha_Atencion AS Fecha_Tamizaje
+        FROM NominalTrama WHERE Codigo_Item = '96150.01'
+    ),
+    VIOLENCIA AS (
+        SELECT Id_Paciente, Id_Establecimiento, Fecha_Atencion AS Fecha_R456
+        FROM NominalTrama WHERE Codigo_Item LIKE '%R456%' AND Tipo_Diagnostico = 'D'
+    ),
+    DX AS (
+        SELECT 
+            V.Id_Paciente, 
+            V.Id_Establecimiento, 
+            V.Fecha_R456,
+            MIN(N.Fecha_Atencion) AS Fecha_DX
+        FROM VIOLENCIA V 
+        INNER JOIN NominalTrama N 
+            ON N.Id_Paciente = V.Id_Paciente
+            AND N.Id_Establecimiento = V.Id_Establecimiento
+            AND (N.Codigo_Item IN ('T740','T741','T742','T743','T748','T749')
+                OR N.Codigo_Item LIKE 'Y04%' OR N.Codigo_Item LIKE 'Y05%'
+                OR N.Codigo_Item LIKE 'Y06%' OR N.Codigo_Item LIKE 'Y07%' 
+                OR N.Codigo_Item LIKE 'Y08%')
+            AND N.Tipo_Diagnostico IN ('D','P')
+            AND julianday(N.Fecha_Atencion) - julianday(V.Fecha_R456) BETWEEN 0 AND 15
+        GROUP BY V.Id_Paciente, V.Id_Establecimiento, V.Fecha_R456
+    ),
+    DIAG_VISITA AS (
+        SELECT DISTINCT 
+            Id_Paciente, 
+            Id_Establecimiento, 
+            Fecha_Atencion AS Fecha_Visita
+        FROM NominalTrama 
+        WHERE (Codigo_Item IN ('T740','T741','T742','T743','T748','T749')
+            OR Codigo_Item LIKE 'Y04%' OR Codigo_Item LIKE 'Y05%'
+            OR Codigo_Item LIKE 'Y06%' OR Codigo_Item LIKE 'Y07%' 
+            OR Codigo_Item LIKE 'Y08%')
+        AND Tipo_Diagnostico IN ('D','P','R')
+    ),
+    CSM_RAW AS (
+        SELECT 
+            N.Id_Paciente, 
+            N.Id_Establecimiento, 
+            N.Fecha_Atencion AS Fecha_CSM
+        FROM NominalTrama N 
+        INNER JOIN DIAG_VISITA DV 
+            ON DV.Id_Paciente = N.Id_Paciente
+            AND DV.Id_Establecimiento = N.Id_Establecimiento
+            AND DV.Fecha_Visita = N.Fecha_Atencion
+        WHERE N.Codigo_Item IN ('99207','99214.06','99215')
+    ),
+    INTERV_RAW AS (
+        SELECT 
+            N.Id_Paciente, 
+            N.Id_Establecimiento, 
+            N.Fecha_Atencion AS Fecha_INT
+        FROM NominalTrama N 
+        INNER JOIN DIAG_VISITA DV 
+            ON DV.Id_Paciente = N.Id_Paciente
+            AND DV.Id_Establecimiento = N.Id_Establecimiento
+            AND DV.Fecha_Visita = N.Fecha_Atencion
+        WHERE N.Codigo_Item = '99207.01' 
+           OR N.Codigo_Item LIKE '90806%' 
+           OR N.Codigo_Item LIKE '90834%'
+           OR N.Codigo_Item LIKE '90860%'
+    ),
+    CSM_PRIMERA AS (
+        SELECT 
+            C.Id_Paciente, 
+            MIN(C.Fecha_CSM) AS Primera_CSM
+        FROM CSM_RAW C 
+        INNER JOIN DX D 
+            ON D.Id_Paciente = C.Id_Paciente
+            AND D.Id_Establecimiento = C.Id_Establecimiento
+        WHERE julianday(C.Fecha_CSM) - julianday(D.Fecha_DX) BETWEEN 0 AND 30
+        GROUP BY C.Id_Paciente
+    ),
+    CSM_OK AS (
+        SELECT DISTINCT C.Id_Paciente
+        FROM CSM_RAW C 
+        INNER JOIN CSM_PRIMERA P 
+            ON P.Id_Paciente = C.Id_Paciente
+        WHERE julianday(C.Fecha_CSM) - julianday(P.Primera_CSM) BETWEEN 7 AND 30
+    ),
+    INTERV_ORDENADA AS (
+        SELECT 
+            I.Id_Paciente, 
+            I.Fecha_INT, 
+            D.Fecha_DX,
+            LAG(I.Fecha_INT) OVER (PARTITION BY I.Id_Paciente ORDER BY I.Fecha_INT) AS Fecha_Prev
+        FROM INTERV_RAW I 
+        INNER JOIN DX D 
+            ON D.Id_Paciente = I.Id_Paciente
+            AND D.Id_Establecimiento = I.Id_Establecimiento
+    ),
+    INTERV_FLAGGED AS (
+        SELECT 
+            *,
+            CASE 
+                WHEN Fecha_Prev IS NULL 
+                 AND julianday(Fecha_INT) - julianday(Fecha_DX) BETWEEN 0 AND 30 
+                THEN 0
+                WHEN Fecha_Prev IS NOT NULL 
+                 AND julianday(Fecha_INT) - julianday(Fecha_Prev) BETWEEN 7 AND 30 
+                THEN 0 
+                ELSE 1 
+            END AS ROMPE_CADENA
+        FROM INTERV_ORDENADA
+    ),
+    INTERV_GRUPO AS (
+        SELECT 
+            *,
+            SUM(ROMPE_CADENA) OVER (PARTITION BY Id_Paciente ORDER BY Fecha_INT) AS GRUPO_CADENA
+        FROM INTERV_FLAGGED
+    ),
+    INTERV_CADENA_VALIDA AS (
+        SELECT 
+            Id_Paciente, 
+            GRUPO_CADENA, 
+            COUNT(*) AS N_INTERVENCIONES
+        FROM INTERV_GRUPO 
+        GROUP BY Id_Paciente, GRUPO_CADENA 
+        HAVING COUNT(*) >= 6
+    ),
+    INTERV_OK AS (
+        SELECT DISTINCT Id_Paciente FROM INTERV_CADENA_VALIDA
+    ),
+    RESULTADO AS (
+        SELECT 
+            A.Id_Paciente, 
+            A.Id_Establecimiento, 
+            A.Fecha_APN, 
+            1 AS DENOMINADOR,
+            CASE 
+                WHEN CO.Id_Paciente IS NOT NULL AND IO.Id_Paciente IS NOT NULL 
+                THEN 1 
+                ELSE 0 
+            END AS NUMERADOR
+        FROM APN A
+        INNER JOIN TAMIZAJE T 
+            ON T.Id_Paciente = A.Id_Paciente 
+            AND T.Id_Establecimiento = A.Id_Establecimiento
+        INNER JOIN VIOLENCIA V 
+            ON V.Id_Paciente = A.Id_Paciente 
+            AND V.Id_Establecimiento = A.Id_Establecimiento
+        INNER JOIN DX D 
+            ON D.Id_Paciente = A.Id_Paciente 
+            AND D.Id_Establecimiento = A.Id_Establecimiento
+        LEFT JOIN CSM_OK CO 
+            ON CO.Id_Paciente = A.Id_Paciente
+        LEFT JOIN INTERV_OK IO 
+            ON IO.Id_Paciente = A.Id_Paciente
+    )
+    SELECT 
+        P.Id_Paciente,
+        P.Numero_Documento AS DNI_PACIENTE,
+        P.Apellido_Paterno_Paciente || ' ' || P.Apellido_Materno_Paciente || ' ' || P.Nombres_Paciente AS PACIENTE,
+        MIN(R.Fecha_APN) AS PRIMERA_FECHA_ATENCION,
+        MAX(N.Anio_Actual_Paciente) AS EDAD_ANIO,
+        MAX(R.DENOMINADOR) AS DENOMINADOR,
+        MAX(R.NUMERADOR) AS NUMERADOR
+    FROM RESULTADO R
+    INNER JOIN MaestroPaciente P ON P.Id_Paciente = R.Id_Paciente
+    INNER JOIN NominalTrama N ON N.Id_Paciente = R.Id_Paciente
+    GROUP BY P.Id_Paciente, P.Numero_Documento, PACIENTE
+    ORDER BY PRIMERA_FECHA_ATENCION`;
+}
+
+// ============================================================
+// MOSTRAR RESULTADOS
+// ============================================================
+function mostrarResultados(df, resumen) {
+    document.getElementById('resultadosCard').style.display = 'block';
+    
+    document.getElementById('resumenBox').innerHTML = `
+        <div class="resumen-grid">
+            <div class="resumen-item">
+                <span class="label"><i class="fas fa-users"></i> Total</span>
+                <span class="value">${resumen.total}</span>
+            </div>
+            <div class="resumen-item">
+                <span class="label"><i class="fas fa-arrow-down"></i> Denominador</span>
+                <span class="value">${resumen.denominador}</span>
+            </div>
+            <div class="resumen-item">
+                <span class="label"><i class="fas fa-arrow-up"></i> Numerador</span>
+                <span class="value ${resumen.numerador > 0 ? 'success' : 'warning'}">${resumen.numerador}</span>
+            </div>
+            <div class="resumen-item">
+                <span class="label"><i class="fas fa-percent"></i> Avance</span>
+                <span class="value ${resumen.porcentaje >= 50 ? 'success' : resumen.porcentaje > 0 ? 'warning' : 'danger'}">${resumen.porcentaje.toFixed(2)}%</span>
+            </div>
+            <div class="resumen-item" style="grid-column: span 4; border-top: 1px solid rgba(15,43,75,0.06); padding-top: 12px;">
+                <span class="label"><i class="fas fa-folder-open"></i> Datos procesados</span>
+                <span class="value" style="font-size:18px;">${resumen.archivos} archivos · ${resumen.registros.toLocaleString()} registros</span>
+            </div>
+        </div>
+    `;
+    
+    const columns = Object.keys(df[0]);
+    document.getElementById('tableHead').innerHTML = `<tr>${columns.map(col => `<th>${col}</th>`).join('')}</tr>`;
+    
+    document.getElementById('tableBody').innerHTML = df.map(row => {
+        return `<tr>${columns.map(col => {
+            const value = row[col] !== undefined ? row[col] : '';
+            let cls = '';
+            if (col === 'NUMERADOR' && value === 1) cls = 'numerador-1';
+            if (col === 'DENOMINADOR' && value === 1) cls = 'denominador-1';
+            return `<td class="${cls}">${value}</td>`;
+        }).join('')}</tr>`;
+    }).join('');
+    
+    document.getElementById('rowCount').textContent = `${df.length} pacientes únicos`;
+}
+
+// ============================================================
+// EXPORTAR A EXCEL
+// ============================================================
+function exportToExcel() {
+    if (!state.resultado || state.resultado.length === 0) {
+        alert('No hay datos para exportar');
+        return;
+    }
+    
+    try {
+        const data = state.resultado.map(row => ({...row}));
+        const columns = Object.keys(data[0] || {});
+        
+        let html = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" 
+              xmlns:x="urn:schemas-microsoft-com:office:excel" 
+              xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                .title { font-size: 18pt; font-weight: bold; color: #1B4F72; text-align: center; border: none; }
+                .subtitle { font-size: 12pt; font-weight: bold; color: #2E86C1; text-align: center; border: none; }
+                .resumen { font-size: 12pt; font-weight: bold; color: #B7950B; background-color: #FEF9E7; text-align: center; border: none; }
+                .header { font-size: 11pt; font-weight: bold; color: #FFFFFF; background-color: #1B4F72; text-align: center; border: 1px solid #FFFFFF; padding: 6px; }
+                .data-even { background-color: #F8F9FA; border: 1px solid #DEE2E6; padding: 4px 6px; }
+                .data-odd { background-color: #FFFFFF; border: 1px solid #DEE2E6; padding: 4px 6px; }
+                .numerador-1 { background-color: #C6EFCE !important; font-weight: bold; color: #006100; border: 1px solid #DEE2E6; padding: 4px 6px; }
+                .denominador-1 { background-color: #D6EAF8 !important; font-weight: bold; color: #1B4F72; border: 1px solid #DEE2E6; padding: 4px 6px; }
+                table { border-collapse: collapse; width: 100%; }
+                td, th { padding: 4px 8px; }
+            </style>
+        </head>
+        <body>
+            <table>
+                <tr><td colspan="${columns.length}" class="title">REPORTE NOMINAL DE PACIENTES ÚNICOS</td></tr>
+                <tr><td colspan="${columns.length}" class="subtitle">Indicador: ${document.getElementById('indicadorSelect').value}</td></tr>
+                <tr><td colspan="${columns.length}" class="subtitle" style="font-size:10pt;color:#6C757D;">Pacientes únicos totales: ${state.resumen.total} | Fecha proceso: ${new Date().toLocaleString()}</td></tr>
+                <tr><td colspan="${columns.length}" class="resumen">RESUMEN → Denominador: ${state.resumen.denominador} | Numerador: ${state.resumen.numerador} | % Avance: ${state.resumen.porcentaje.toFixed(2)}%</td></tr>
+                <tr><td colspan="${columns.length}" style="height:10px;border:none;"></td></tr>
+                <tr>${columns.map(col => `<th class="header">${col}</th>`).join('')}</tr>
+                ${data.map((row, idx) => {
+                    const rowClass = idx % 2 === 0 ? 'data-even' : 'data-odd';
+                    return `<tr>${columns.map(col => {
+                        const value = row[col] !== undefined ? row[col] : '';
+                        let cellClass = rowClass;
+                        if (col === 'NUMERADOR' && value === 1) cellClass = 'numerador-1';
+                        if (col === 'DENOMINADOR' && value === 1) cellClass = 'denominador-1';
+                        return `<td class="${cellClass}">${value}</td>`;
+                    }).join('')}</tr>`;
+                }).join('')}
+            </table>
+        </body>
+        </html>`;
+        
+        const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        const fecha = new Date().toISOString().split('T')[0];
+        link.download = `INDICADOR_VI-01_${fecha}.xls`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+        
+        addLog('✅ Reporte exportado a Excel con diseño premium');
+        
+    } catch (error) {
+        addLog('❌ Error al exportar: ' + error.message);
+        alert('Error al exportar: ' + error.message);
+    }
+}
+</script>
+</body>
+</html>
