@@ -272,7 +272,78 @@ function queryVI0101(f_i, f_f) {
     INNER JOIN NominalTrama N ON N.Id_Paciente = G.Id_Paciente
     GROUP BY P.Id_Paciente, P.Numero_Documento, PACIENTE ORDER BY PRIMERA_FECHA_ATENCION`;
 }
-
+function queryVI0101(f_i, f_f) {
+    return `WITH APN AS (
+        SELECT 
+            Id_Paciente, 
+            Id_Establecimiento, 
+            Fecha_Atencion AS Fecha_APN
+        FROM NominalTrama 
+        WHERE Fecha_Atencion BETWEEN '${f_i}' AND '${f_f}'
+          AND Codigo_Item IN ('Z3491','Z3492','Z3493','Z3591','Z3592','Z3593')
+        GROUP BY Id_Paciente, Id_Establecimiento, Fecha_Atencion
+    ),
+    TAMIZAJE AS (
+        SELECT 
+            Id_Paciente, 
+            Id_Establecimiento, 
+            MIN(Fecha_Atencion) AS Fecha_Tamizaje
+        FROM NominalTrama 
+        WHERE Codigo_Item = '96150.01'
+        GROUP BY Id_Paciente, Id_Establecimiento
+    ),
+    POSITIVO AS (
+        SELECT 
+            Id_Paciente, 
+            Id_Establecimiento, 
+            Fecha_Atencion AS Fecha_Positivo
+        FROM NominalTrama 
+        WHERE Codigo_Item = 'R456' 
+          AND Tipo_Diagnostico = 'D'
+        GROUP BY Id_Paciente, Id_Establecimiento, Fecha_Atencion
+    ),
+    GESTANTES AS (
+        SELECT 
+            A.Id_Paciente,
+            A.Id_Establecimiento,
+            A.Fecha_APN,
+            T.Fecha_Tamizaje,
+            R.Fecha_Positivo,
+            1 AS DENOMINADOR,
+            CASE 
+                WHEN R.Id_Paciente IS NOT NULL 
+                 AND R.Fecha_Positivo = A.Fecha_APN 
+                THEN 1 ELSE 0 
+            END AS NUMERADOR
+        FROM APN A
+        INNER JOIN TAMIZAJE T 
+            ON T.Id_Paciente = A.Id_Paciente 
+            AND T.Id_Establecimiento = A.Id_Establecimiento
+        LEFT JOIN POSITIVO R 
+            ON R.Id_Paciente = A.Id_Paciente 
+            AND R.Id_Establecimiento = A.Id_Establecimiento
+    )
+    SELECT 
+        P.Numero_Documento AS DNI_PACIENTE,
+        P.Apellido_Paterno_Paciente || ' ' || P.Apellido_Materno_Paciente || ' ' || P.Nombres_Paciente AS PACIENTE,
+        G.Fecha_APN AS "FECHA APN(Z34%-Z35%)",
+        G.Fecha_Tamizaje AS "FECHA TAMIZAJE VIOLENCIA",
+        G.Fecha_Positivo AS "FECHA POSITIVO",
+        G.DENOMINADOR,
+        G.NUMERADOR
+    FROM GESTANTES G
+    INNER JOIN MaestroPaciente P 
+        ON P.Id_Paciente = G.Id_Paciente
+    GROUP BY 
+        P.Numero_Documento,
+        PACIENTE,
+        G.Fecha_APN,
+        G.Fecha_Tamizaje,
+        G.Fecha_Positivo,
+        G.DENOMINADOR,
+        G.NUMERADOR
+    ORDER BY G.Fecha_APN`;
+}
 function queryVI0102(f_i, f_f) {
     return `WITH APN AS (SELECT Id_Paciente, Id_Establecimiento, Fecha_Atencion AS Fecha_APN
         FROM NominalTrama WHERE Fecha_Atencion BETWEEN '${f_i}' AND '${f_f}'
