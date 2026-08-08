@@ -1,13 +1,18 @@
-// Estado global
+// ============================================================
+// ESTADO GLOBAL - MÚLTIPLES ARCHIVOS
+// ============================================================
 const state = {
-    nominal: null,
+    nominalData: [],      // ← Ahora es un ARRAY de DataFrames
+    nominalFiles: [],     // ← Lista de nombres de archivos cargados
     maestro: null,
     resultado: null,
     resumen: null,
     procesando: false
 };
 
-// Inicialización
+// ============================================================
+// INICIALIZACIÓN
+// ============================================================
 document.addEventListener('DOMContentLoaded', function() {
     const hoy = new Date();
     const hace6Meses = new Date();
@@ -16,38 +21,71 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('fechaInicio').value = hace6Meses.toISOString().split('T')[0];
     document.getElementById('fechaFin').value = hoy.toISOString().split('T')[0];
     
-    document.getElementById('nominalFile').addEventListener('change', handleNominalFile);
+    // Event listeners
+    document.getElementById('nominalFile').addEventListener('change', handleNominalFiles);
     document.getElementById('maestroFile').addEventListener('change', handleMaestroFile);
     document.getElementById('btnProcesar').addEventListener('click', procesar);
 });
 
-// Manejo de archivos
-function handleNominalFile(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+// ============================================================
+// MANEJO DE ARCHIVOS NOMINAL - MÚLTIPLES
+// ============================================================
+function handleNominalFiles(event) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
     
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        try {
-            const result = Papa.parse(e.target.result, { header: true, skipEmptyLines: true });
-            state.nominal = result.data;
-            
-            const box = document.getElementById('nominalUpload');
-            box.classList.add('loaded');
-            document.getElementById('nominalStatus').textContent = `✅ ${state.nominal.length} registros`;
-            document.getElementById('nominalStatus').className = 'file-status loaded';
-            document.getElementById('nominalCount').textContent = state.nominal.length;
-            
-            addLog('✅ NominalTrama cargado: ' + state.nominal.length + ' registros');
-            checkReady();
-        } catch (error) {
-            addLog('❌ Error: ' + error.message);
-            alert('Error: ' + error.message);
-        }
-    };
-    reader.readAsText(file);
+    let archivosCargados = 0;
+    let registrosTotales = 0;
+    
+    // Procesar cada archivo
+    Array.from(files).forEach((file, index) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const result = Papa.parse(e.target.result, { 
+                    header: true, 
+                    skipEmptyLines: true 
+                });
+                
+                // Agregar al array de datos
+                state.nominalData.push({
+                    nombre: file.name,
+                    data: result.data
+                });
+                
+                archivosCargados++;
+                registrosTotales += result.data.length;
+                
+                // Actualizar UI
+                document.getElementById('nominalStatus').textContent = `✅ ${archivosCargados} archivo(s) cargado(s)`;
+                document.getElementById('nominalStatus').className = 'file-status loaded';
+                document.getElementById('nominalFileCountDisplay').textContent = archivosCargados;
+                document.getElementById('nominalCount').textContent = registrosTotales;
+                
+                // Mostrar nombres de archivos
+                const nombres = state.nominalData.map(d => d.nombre).join(', ');
+                document.getElementById('nominalFileCount').textContent = `📁 ${nombres}`;
+                
+                const box = document.getElementById('nominalUpload');
+                box.classList.add('loaded');
+                
+                addLog(`✅ Cargado: ${file.name} (${result.data.length} registros)`);
+                addLog(`📊 Total acumulado: ${registrosTotales} registros en ${archivosCargados} archivos`);
+                
+                checkReady();
+                
+            } catch (error) {
+                addLog(`❌ Error al cargar ${file.name}: ${error.message}`);
+                alert(`Error al cargar ${file.name}: ${error.message}`);
+            }
+        };
+        reader.readAsText(file);
+    });
 }
 
+// ============================================================
+// MANEJO DE MAESTRO PACIENTE
+// ============================================================
 function handleMaestroFile(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -74,13 +112,21 @@ function handleMaestroFile(event) {
     reader.readAsText(file);
 }
 
+// ============================================================
+// VERIFICAR LISTO
+// ============================================================
 function checkReady() {
-    const ready = state.nominal && state.maestro;
+    const ready = state.nominalData.length > 0 && state.maestro;
     document.getElementById('btnProcesar').disabled = !ready;
-    if (ready) addLog('✅ Archivos listos');
+    if (ready) {
+        const totalReg = state.nominalData.reduce((sum, d) => sum + d.data.length, 0);
+        addLog(`✅ Listo para procesar: ${state.nominalData.length} archivos, ${totalReg} registros totales`);
+    }
 }
 
-// Log
+// ============================================================
+// LOG
+// ============================================================
 function addLog(message) {
     const container = document.getElementById('logContainer');
     document.getElementById('logCard').style.display = 'block';
@@ -96,11 +142,13 @@ function clearLog() {
     document.getElementById('logContainer').innerHTML = '<div class="log-entry">📋 Log limpiado</div>';
 }
 
-// Procesamiento
+// ============================================================
+// PROCESAMIENTO - CON DATOS ACUMULADOS
+// ============================================================
 async function procesar() {
     if (state.procesando) return;
-    if (!state.nominal || !state.maestro) {
-        alert('Primero cargue ambos archivos');
+    if (state.nominalData.length === 0 || !state.maestro) {
+        alert('Primero cargue los archivos');
         return;
     }
     
@@ -121,16 +169,24 @@ async function procesar() {
         addLog('⏳ Creando base de datos...');
         const db = new SQL.Database();
         
-        addLog('⏳ Cargando datos...');
-        updateProgress(20);
-        cargarDatosSQLite(db);
+        addLog('⏳ Cargando datos acumulados...');
+        updateProgress(10);
+        
+        // Cargar TODOS los archivos Nominal acumulados
+        cargarDatosNominalSQLite(db);
         updateProgress(40);
+        
+        // Cargar Maestro
+        cargarDatosMaestroSQLite(db);
+        updateProgress(50);
         
         const fechaInicio = document.getElementById('fechaInicio').value;
         const fechaFin = document.getElementById('fechaFin').value;
         const indicador = document.getElementById('indicadorSelect').value;
         
-        addLog(`⏳ Procesando ${indicador}...`);
+        const totalRegistros = state.nominalData.reduce((sum, d) => sum + d.data.length, 0);
+        addLog(`⏳ Procesando ${totalRegistros} registros de ${state.nominalData.length} archivos...`);
+        addLog(`⏳ ${indicador} (${fechaInicio} a ${fechaFin})`);
         updateProgress(60);
         
         const query = indicador === 'VI-01.01' 
@@ -141,8 +197,8 @@ async function procesar() {
         updateProgress(80);
         
         if (resultados.length === 0 || resultados[0].values.length === 0) {
-            addLog('ℹ️ No se encontraron pacientes');
-            alert('No hay resultados para este rango');
+            addLog('ℹ️ No se encontraron pacientes que cumplan el denominador');
+            alert('No hay resultados para el rango seleccionado');
             state.procesando = false;
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-play"></i> Generar Reporte';
@@ -167,11 +223,14 @@ async function procesar() {
             total: df.length,
             denominador: sumaDenominador,
             numerador: sumaNumerador,
-            porcentaje: porcentajeAvance
+            porcentaje: porcentajeAvance,
+            archivos: state.nominalData.length,
+            registros: state.nominalData.reduce((sum, d) => sum + d.data.length, 0)
         };
         
         updateProgress(100);
         addLog('✅ Procesamiento completado');
+        addLog(`📊 Resultados: ${df.length} pacientes únicos`);
         
         mostrarResultados(df, state.resumen);
         db.close();
@@ -191,7 +250,9 @@ function updateProgress(value) {
     document.getElementById('progressText').textContent = value + '%';
 }
 
-// Cargar SQL.js
+// ============================================================
+// CARGA DE SQL.JS
+// ============================================================
 function cargarSQLJS() {
     return new Promise((resolve, reject) => {
         if (typeof SQL !== 'undefined') { resolve(); return; }
@@ -212,42 +273,82 @@ function cargarSQLJS() {
     });
 }
 
-function cargarDatosSQLite(db) {
+// ============================================================
+// CARGA DE DATOS NOMINAL - TODOS LOS ARCHIVOS
+// ============================================================
+function cargarDatosNominalSQLite(db) {
+    // Crear tabla
     db.run(`CREATE TABLE NominalTrama (
-        Id_Paciente TEXT, Id_Establecimiento TEXT, Fecha_Atencion TEXT,
-        Codigo_Item TEXT, Tipo_Diagnostico TEXT, Anio_Actual_Paciente INTEGER,
+        Id_Paciente TEXT,
+        Id_Establecimiento TEXT,
+        Fecha_Atencion TEXT,
+        Codigo_Item TEXT,
+        Tipo_Diagnostico TEXT,
+        Anio_Actual_Paciente INTEGER,
         Historia_Clinica TEXT
-    )`);
-    
-    db.run(`CREATE TABLE MaestroPaciente (
-        Id_Paciente TEXT, Numero_Documento TEXT,
-        Apellido_Paterno_Paciente TEXT, Apellido_Materno_Paciente TEXT,
-        Nombres_Paciente TEXT, Historia_Clinica TEXT
     )`);
     
     const nominalColumns = ['Id_Paciente', 'Id_Establecimiento', 'Fecha_Atencion', 
                            'Codigo_Item', 'Tipo_Diagnostico', 'Anio_Actual_Paciente', 
                            'Historia_Clinica'];
-    const batchSize = 500;
+    const batchSize = 1000;
     
-    for (let i = 0; i < state.nominal.length; i += batchSize) {
-        const batch = state.nominal.slice(i, i + batchSize);
-        const placeholders = batch.map(() => `(${nominalColumns.map(() => '?').join(',')})`).join(',');
-        const values = batch.flatMap(row => nominalColumns.map(col => row[col] || ''));
-        db.run(`INSERT INTO NominalTrama VALUES ${placeholders}`, values);
-    }
+    let totalInsertados = 0;
+    
+    // Recorrer TODOS los archivos cargados
+    state.nominalData.forEach((archivo, idx) => {
+        const data = archivo.data;
+        addLog(`⏳ Insertando ${data.length} registros de ${archivo.nombre}...`);
+        
+        for (let i = 0; i < data.length; i += batchSize) {
+            const batch = data.slice(i, i + batchSize);
+            const placeholders = batch.map(() => `(${nominalColumns.map(() => '?').join(',')})`).join(',');
+            const values = batch.flatMap(row => nominalColumns.map(col => row[col] || ''));
+            db.run(`INSERT INTO NominalTrama VALUES ${placeholders}`, values);
+            totalInsertados += batch.length;
+        }
+        
+        addLog(`✅ ${archivo.nombre}: ${data.length} registros insertados`);
+    });
+    
+    // Crear índices para mejorar performance
+    db.run('CREATE INDEX idx_nominal_paciente ON NominalTrama(Id_Paciente)');
+    db.run('CREATE INDEX idx_nominal_fecha ON NominalTrama(Fecha_Atencion)');
+    db.run('CREATE INDEX idx_nominal_codigo ON NominalTrama(Codigo_Item)');
+    
+    addLog(`✅ Total insertado: ${totalInsertados} registros de ${state.nominalData.length} archivos`);
+}
+
+// ============================================================
+// CARGA DE DATOS MAESTRO
+// ============================================================
+function cargarDatosMaestroSQLite(db) {
+    db.run(`CREATE TABLE MaestroPaciente (
+        Id_Paciente TEXT,
+        Numero_Documento TEXT,
+        Apellido_Paterno_Paciente TEXT,
+        Apellido_Materno_Paciente TEXT,
+        Nombres_Paciente TEXT,
+        Historia_Clinica TEXT
+    )`);
     
     const maestroColumns = ['Id_Paciente', 'Numero_Documento', 'Apellido_Paterno_Paciente',
                            'Apellido_Materno_Paciente', 'Nombres_Paciente', 'Historia_Clinica'];
     
+    const batchSize = 1000;
     for (let i = 0; i < state.maestro.length; i += batchSize) {
         const batch = state.maestro.slice(i, i + batchSize);
         const placeholders = batch.map(() => `(${maestroColumns.map(() => '?').join(',')})`).join(',');
         const values = batch.flatMap(row => maestroColumns.map(col => row[col] || ''));
         db.run(`INSERT INTO MaestroPaciente VALUES ${placeholders}`, values);
     }
+    
+    db.run('CREATE INDEX idx_maestro_paciente ON MaestroPaciente(Id_Paciente)');
 }
 
+// ============================================================
+// QUERY VI-01.01 (CORREGIDA)
+// ============================================================
 function queryVI0101(f_i, f_f) {
     return `WITH APN AS (
         SELECT 
@@ -263,10 +364,10 @@ function queryVI0101(f_i, f_f) {
         SELECT 
             Id_Paciente, 
             Id_Establecimiento, 
-            Fecha_Atencion AS Fecha_Tamizaje
+            MIN(Fecha_Atencion) AS Fecha_Tamizaje
         FROM NominalTrama 
         WHERE Codigo_Item = '96150.01'
-        GROUP BY Id_Paciente, Id_Establecimiento, Fecha_Atencion  -- ✅ Fecha específica
+        GROUP BY Id_Paciente, Id_Establecimiento
     ),
     POSITIVO AS (
         SELECT 
@@ -278,7 +379,6 @@ function queryVI0101(f_i, f_f) {
           AND Tipo_Diagnostico = 'D'
         GROUP BY Id_Paciente, Id_Establecimiento, Fecha_Atencion
     ),
-    -- ✅ DENOMINADOR: APN + TAMIZAJE (cualquier fecha, pero en el mismo establecimiento)
     DENOMINADOR AS (
         SELECT 
             A.Id_Paciente,
@@ -292,7 +392,6 @@ function queryVI0101(f_i, f_f) {
             AND T.Id_Establecimiento = A.Id_Establecimiento
         GROUP BY A.Id_Paciente, A.Id_Establecimiento, A.Fecha_APN, T.Fecha_Tamizaje
     ),
-    -- ✅ NUMERADOR: APN + TAMIZAJE + POSITIVO (mismo día que APN)
     NUMERADOR AS (
         SELECT 
             D.Id_Paciente,
@@ -302,7 +401,7 @@ function queryVI0101(f_i, f_f) {
             D.DENOMINADOR,
             CASE 
                 WHEN P.Id_Paciente IS NOT NULL 
-                 AND P.Fecha_Positivo = D.Fecha_APN  -- ✅ MISMO DÍA que APN
+                 AND P.Fecha_Positivo = D.Fecha_APN
                 THEN 1 
                 ELSE 0 
             END AS NUMERADOR
@@ -310,14 +409,14 @@ function queryVI0101(f_i, f_f) {
         LEFT JOIN POSITIVO P 
             ON P.Id_Paciente = D.Id_Paciente 
             AND P.Id_Establecimiento = D.Id_Establecimiento
-            AND P.Fecha_Positivo = D.Fecha_APN  -- ✅ Condición de mismo día
+            AND P.Fecha_Positivo = D.Fecha_APN
     )
     SELECT 
         P.Numero_Documento AS DNI_PACIENTE,
         P.Apellido_Paterno_Paciente || ' ' || P.Apellido_Materno_Paciente || ' ' || P.Nombres_Paciente AS PACIENTE,
         N.Fecha_APN AS "FECHA APN(Z34%-Z35%)",
         N.Fecha_Tamizaje AS "FECHA TAMIZAJE VIOLENCIA",
-        MAX(POS.Fecha_Positivo) AS "FECHA POSITIVO",  -- ✅ Muestra la fecha del positivo si existe
+        MAX(POS.Fecha_Positivo) AS "FECHA POSITIVO",
         MAX(N.DENOMINADOR) AS DENOMINADOR,
         MAX(N.NUMERADOR) AS NUMERADOR
     FROM NUMERADOR N
@@ -334,89 +433,144 @@ function queryVI0101(f_i, f_f) {
         N.Fecha_Tamizaje
     ORDER BY N.Fecha_APN`;
 }
+
+// ============================================================
+// QUERY VI-01.02 (CORREGIDA)
+// ============================================================
 function queryVI0102(f_i, f_f) {
-    return `WITH APN AS (SELECT Id_Paciente, Id_Establecimiento, Fecha_Atencion AS Fecha_APN
-        FROM NominalTrama WHERE Fecha_Atencion BETWEEN '${f_i}' AND '${f_f}'
-        AND Codigo_Item IN ('Z3491','Z3492','Z3493','Z3591','Z3592','Z3593')
-        GROUP BY Id_Paciente, Id_Establecimiento, Fecha_Atencion),
-    TAMIZAJE AS (SELECT Id_Paciente, Id_Establecimiento, MIN(Fecha_Atencion) AS Fecha_Tamizaje
+    return `WITH APN AS (
+        SELECT Id_Paciente, Id_Establecimiento, Fecha_Atencion AS Fecha_APN
+        FROM NominalTrama 
+        WHERE Fecha_Atencion BETWEEN '${f_i}' AND '${f_f}'
+          AND Codigo_Item IN ('Z3491','Z3492','Z3493','Z3591','Z3592','Z3593')
+        GROUP BY Id_Paciente, Id_Establecimiento, Fecha_Atencion
+    ),
+    TAMIZAJE AS (
+        SELECT Id_Paciente, Id_Establecimiento, MIN(Fecha_Atencion) AS Fecha_Tamizaje
         FROM NominalTrama WHERE Codigo_Item = '96150.01'
-        GROUP BY Id_Paciente, Id_Establecimiento),
-    VIOLENCIA AS (SELECT Id_Paciente, Id_Establecimiento, MIN(Fecha_Atencion) AS Fecha_R456
+        GROUP BY Id_Paciente, Id_Establecimiento
+    ),
+    VIOLENCIA AS (
+        SELECT Id_Paciente, Id_Establecimiento, MIN(Fecha_Atencion) AS Fecha_R456
         FROM NominalTrama WHERE Codigo_Item = 'R456' AND Tipo_Diagnostico = 'D'
-        GROUP BY Id_Paciente, Id_Establecimiento),
-    DX AS (SELECT V.Id_Paciente, V.Id_Establecimiento, MIN(N.Fecha_Atencion) AS Fecha_DX
+        GROUP BY Id_Paciente, Id_Establecimiento
+    ),
+    DX AS (
+        SELECT V.Id_Paciente, V.Id_Establecimiento, MIN(N.Fecha_Atencion) AS Fecha_DX
         FROM VIOLENCIA V INNER JOIN NominalTrama N ON N.Id_Paciente = V.Id_Paciente
         AND (N.Codigo_Item IN ('T740','T741','T742','T743','T748','T749')
         OR N.Codigo_Item LIKE 'Y04%' OR N.Codigo_Item LIKE 'Y05%'
         OR N.Codigo_Item LIKE 'Y06%' OR N.Codigo_Item LIKE 'Y07%' OR N.Codigo_Item LIKE 'Y08%')
         AND N.Tipo_Diagnostico IN ('D','P')
         AND julianday(N.Fecha_Atencion) - julianday(V.Fecha_R456) BETWEEN 0 AND 15
-        GROUP BY V.Id_Paciente, V.Id_Establecimiento),
-    DIAG_VISITA AS (SELECT DISTINCT Id_Paciente, Id_Establecimiento, Fecha_Atencion AS Fecha_Visita
+        GROUP BY V.Id_Paciente, V.Id_Establecimiento
+    ),
+    DIAG_VISITA AS (
+        SELECT DISTINCT Id_Paciente, Id_Establecimiento, Fecha_Atencion AS Fecha_Visita
         FROM NominalTrama WHERE (Codigo_Item IN ('T740','T741','T742','T743','T748','T749')
         OR Codigo_Item LIKE 'Y04%' OR Codigo_Item LIKE 'Y05%'
         OR Codigo_Item LIKE 'Y06%' OR Codigo_Item LIKE 'Y07%' OR Codigo_Item LIKE 'Y08%')
-        AND Tipo_Diagnostico IN ('D','P','R')),
-    CSM_RAW AS (SELECT N.Id_Paciente, N.Id_Establecimiento, N.Fecha_Atencion AS Fecha_CSM
+        AND Tipo_Diagnostico IN ('D','P','R')
+    ),
+    CSM_RAW AS (
+        SELECT N.Id_Paciente, N.Id_Establecimiento, N.Fecha_Atencion AS Fecha_CSM
         FROM NominalTrama N INNER JOIN DIAG_VISITA DV ON DV.Id_Paciente = N.Id_Paciente
         AND DV.Id_Establecimiento = N.Id_Establecimiento AND DV.Fecha_Visita = N.Fecha_Atencion
         WHERE N.Codigo_Item IN ('99207','99214.06','99215')
-        GROUP BY N.Id_Paciente, N.Id_Establecimiento, N.Fecha_Atencion),
-    INTERV_RAW AS (SELECT N.Id_Paciente, N.Id_Establecimiento, N.Fecha_Atencion AS Fecha_INT
+        GROUP BY N.Id_Paciente, N.Id_Establecimiento, N.Fecha_Atencion
+    ),
+    INTERV_RAW AS (
+        SELECT N.Id_Paciente, N.Id_Establecimiento, N.Fecha_Atencion AS Fecha_INT
         FROM NominalTrama N INNER JOIN DIAG_VISITA DV ON DV.Id_Paciente = N.Id_Paciente
         AND DV.Id_Establecimiento = N.Id_Establecimiento AND DV.Fecha_Visita = N.Fecha_Atencion
         WHERE N.Codigo_Item = '99207.01' OR N.Codigo_Item LIKE '90806%' OR N.Codigo_Item LIKE '90834%'
         OR N.Codigo_Item LIKE '90860%'
-        GROUP BY N.Id_Paciente, N.Id_Establecimiento, N.Fecha_Atencion),
-    CSM_PRIMERA AS (SELECT C.Id_Paciente, MIN(C.Fecha_CSM) AS Primera_CSM
+        GROUP BY N.Id_Paciente, N.Id_Establecimiento, N.Fecha_Atencion
+    ),
+    CSM_PRIMERA AS (
+        SELECT C.Id_Paciente, MIN(C.Fecha_CSM) AS Primera_CSM
         FROM CSM_RAW C INNER JOIN DX D ON D.Id_Paciente = C.Id_Paciente
         WHERE julianday(C.Fecha_CSM) - julianday(D.Fecha_DX) BETWEEN 0 AND 30
-        GROUP BY C.Id_Paciente),
-    CSM_OK AS (SELECT DISTINCT C.Id_Paciente
+        GROUP BY C.Id_Paciente
+    ),
+    CSM_OK AS (
+        SELECT DISTINCT C.Id_Paciente
         FROM CSM_RAW C INNER JOIN CSM_PRIMERA P ON P.Id_Paciente = C.Id_Paciente
-        WHERE julianday(C.Fecha_CSM) - julianday(P.Primera_CSM) BETWEEN 7 AND 30),
-    INTERV_ORDENADA AS (SELECT I.Id_Paciente, I.Fecha_INT, D.Fecha_DX,
-        LAG(I.Fecha_INT) OVER (PARTITION BY I.Id_Paciente ORDER BY I.Fecha_INT) AS Fecha_Prev
-        FROM INTERV_RAW I INNER JOIN DX D ON D.Id_Paciente = I.Id_Paciente),
-    INTERV_FLAGGED AS (SELECT *, CASE WHEN Fecha_Prev IS NULL AND julianday(Fecha_INT) - julianday(Fecha_DX) BETWEEN 0 AND 30 THEN 0
+        WHERE julianday(C.Fecha_CSM) - julianday(P.Primera_CSM) BETWEEN 7 AND 30
+    ),
+    INTERV_ORDENADA AS (
+        SELECT I.Id_Paciente, I.Fecha_INT, D.Fecha_DX,
+            LAG(I.Fecha_INT) OVER (PARTITION BY I.Id_Paciente ORDER BY I.Fecha_INT) AS Fecha_Prev
+        FROM INTERV_RAW I INNER JOIN DX D ON D.Id_Paciente = I.Id_Paciente
+    ),
+    INTERV_FLAGGED AS (
+        SELECT *, CASE WHEN Fecha_Prev IS NULL AND julianday(Fecha_INT) - julianday(Fecha_DX) BETWEEN 0 AND 30 THEN 0
         WHEN Fecha_Prev IS NOT NULL AND julianday(Fecha_INT) - julianday(Fecha_Prev) BETWEEN 7 AND 30 THEN 0 ELSE 1 END AS ROMPE_CADENA
-        FROM INTERV_ORDENADA),
-    INTERV_GRUPO AS (SELECT *, SUM(ROMPE_CADENA) OVER (PARTITION BY Id_Paciente ORDER BY Fecha_INT) AS GRUPO_CADENA
-        FROM INTERV_FLAGGED),
-    INTERV_CADENA_VALIDA AS (SELECT Id_Paciente, GRUPO_CADENA, COUNT(*) AS N_INTERVENCIONES
-        FROM INTERV_GRUPO GROUP BY Id_Paciente, GRUPO_CADENA HAVING COUNT(*) >= 6),
-    INTERV_OK AS (SELECT DISTINCT Id_Paciente FROM INTERV_CADENA_VALIDA),
-    RESULTADO AS (SELECT A.Id_Paciente, A.Id_Establecimiento, A.Fecha_APN, 1 AS DENOMINADOR,
-        CASE WHEN CO.Id_Paciente IS NOT NULL AND IO.Id_Paciente IS NOT NULL THEN 1 ELSE 0 END AS NUMERADOR
+        FROM INTERV_ORDENADA
+    ),
+    INTERV_GRUPO AS (
+        SELECT *, SUM(ROMPE_CADENA) OVER (PARTITION BY Id_Paciente ORDER BY Fecha_INT) AS GRUPO_CADENA
+        FROM INTERV_FLAGGED
+    ),
+    INTERV_CADENA_VALIDA AS (
+        SELECT Id_Paciente, GRUPO_CADENA, COUNT(*) AS N_INTERVENCIONES
+        FROM INTERV_GRUPO GROUP BY Id_Paciente, GRUPO_CADENA HAVING COUNT(*) >= 6
+    ),
+    INTERV_OK AS (
+        SELECT DISTINCT Id_Paciente FROM INTERV_CADENA_VALIDA
+    ),
+    RESULTADO AS (
+        SELECT A.Id_Paciente, A.Id_Establecimiento, A.Fecha_APN, 1 AS DENOMINADOR,
+            CASE WHEN CO.Id_Paciente IS NOT NULL AND IO.Id_Paciente IS NOT NULL THEN 1 ELSE 0 END AS NUMERADOR
         FROM APN A INNER JOIN TAMIZAJE T ON T.Id_Paciente = A.Id_Paciente AND T.Id_Establecimiento = A.Id_Establecimiento
         INNER JOIN VIOLENCIA V ON V.Id_Paciente = A.Id_Paciente AND V.Id_Establecimiento = A.Id_Establecimiento
         INNER JOIN DX D ON D.Id_Paciente = A.Id_Paciente AND D.Id_Establecimiento = A.Id_Establecimiento
         LEFT JOIN CSM_OK CO ON CO.Id_Paciente = A.Id_Paciente
-        LEFT JOIN INTERV_OK IO ON IO.Id_Paciente = A.Id_Paciente)
-    SELECT P.Id_Paciente, P.Numero_Documento AS DNI_PACIENTE,
+        LEFT JOIN INTERV_OK IO ON IO.Id_Paciente = A.Id_Paciente
+    )
+    SELECT 
+        P.Id_Paciente,
+        P.Numero_Documento AS DNI_PACIENTE,
         P.Apellido_Paterno_Paciente || ' ' || P.Apellido_Materno_Paciente || ' ' || P.Nombres_Paciente AS PACIENTE,
-        MIN(R.Fecha_APN) AS PRIMERA_FECHA_ATENCION, MAX(N.Anio_Actual_Paciente) AS EDAD_ANIO,
-        MAX(R.DENOMINADOR) AS DENOMINADOR, MAX(R.NUMERADOR) AS NUMERADOR
-    FROM RESULTADO R INNER JOIN MaestroPaciente P ON P.Id_Paciente = R.Id_Paciente
+        MIN(R.Fecha_APN) AS PRIMERA_FECHA_ATENCION,
+        MAX(N.Anio_Actual_Paciente) AS EDAD_ANIO,
+        MAX(R.DENOMINADOR) AS DENOMINADOR,
+        MAX(R.NUMERADOR) AS NUMERADOR
+    FROM RESULTADO R
+    INNER JOIN MaestroPaciente P ON P.Id_Paciente = R.Id_Paciente
     INNER JOIN NominalTrama N ON N.Id_Paciente = R.Id_Paciente
-    GROUP BY P.Id_Paciente, P.Numero_Documento, PACIENTE ORDER BY PRIMERA_FECHA_ATENCION`;
+    GROUP BY P.Id_Paciente, P.Numero_Documento, PACIENTE
+    ORDER BY PRIMERA_FECHA_ATENCION`;
 }
 
-// Mostrar resultados
+// ============================================================
+// MOSTRAR RESULTADOS
+// ============================================================
 function mostrarResultados(df, resumen) {
     document.getElementById('resultadosCard').style.display = 'block';
     
     document.getElementById('resumenBox').innerHTML = `
         <div class="resumen-grid">
-            <div class="resumen-item"><span class="label">Total Pacientes</span>
-                <span class="value">${resumen.total}</span></div>
-            <div class="resumen-item"><span class="label">Denominador</span>
-                <span class="value">${resumen.denominador}</span></div>
-            <div class="resumen-item"><span class="label">Numerador</span>
-                <span class="value ${resumen.numerador > 0 ? 'success' : 'warning'}">${resumen.numerador}</span></div>
-            <div class="resumen-item"><span class="label">% Avance</span>
-                <span class="value ${resumen.porcentaje >= 50 ? 'success' : resumen.porcentaje > 0 ? 'warning' : 'danger'}">${resumen.porcentaje.toFixed(2)}%</span></div>
+            <div class="resumen-item">
+                <span class="label">Total Pacientes</span>
+                <span class="value">${resumen.total}</span>
+            </div>
+            <div class="resumen-item">
+                <span class="label">Denominador</span>
+                <span class="value">${resumen.denominador}</span>
+            </div>
+            <div class="resumen-item">
+                <span class="label">Numerador</span>
+                <span class="value ${resumen.numerador > 0 ? 'success' : 'warning'}">${resumen.numerador}</span>
+            </div>
+            <div class="resumen-item">
+                <span class="label">% Avance</span>
+                <span class="value ${resumen.porcentaje >= 50 ? 'success' : resumen.porcentaje > 0 ? 'warning' : 'danger'}">${resumen.porcentaje.toFixed(2)}%</span>
+            </div>
+            <div class="resumen-item" style="grid-column: span 4; border-top: 1px solid #dee2e6; padding-top: 10px;">
+                <span class="label">📁 Archivos procesados</span>
+                <span class="value" style="font-size:20px;">${resumen.archivos} archivos | ${resumen.registros.toLocaleString()} registros</span>
+            </div>
         </div>
     `;
     
@@ -424,7 +578,6 @@ function mostrarResultados(df, resumen) {
     document.getElementById('tableHead').innerHTML = `<tr>${columns.map(col => `<th>${col}</th>`).join('')}</tr>`;
     
     document.getElementById('tableBody').innerHTML = df.map(row => {
-        const isNumerador = row.NUMERADOR === 1;
         return `<tr>${columns.map(col => {
             const value = row[col] !== undefined ? row[col] : '';
             const cls = col === 'NUMERADOR' && value === 1 ? 'numerador-1' : '';
@@ -435,7 +588,9 @@ function mostrarResultados(df, resumen) {
     document.getElementById('rowCount').textContent = `${df.length} filas`;
 }
 
-// Exportar Excel
+// ============================================================
+// EXPORTAR A EXCEL
+// ============================================================
 function exportToExcel() {
     if (!state.resultado || state.resultado.length === 0) {
         alert('No hay datos para exportar');
@@ -443,88 +598,12 @@ function exportToExcel() {
     }
     
     try {
-        // Datos
-        const columns = Object.keys(state.resultado[0] || {});
-        const dataRows = state.resultado.map(row => columns.map(col => row[col] || ''));
-        
-        // Preparar datos con formato
         const wb = XLSX.utils.book_new();
-        
-        // Crear hoja
-        const wsData = [
-            ['REPORTE NOMINAL DE PACIENTES ÚNICOS - ' + document.getElementById('indicadorSelect').value],
-            ['Pacientes únicos totales: ' + state.resumen.total + ' | Fecha proceso: ' + new Date().toLocaleString()],
-            ['RESUMEN -> Denominador: ' + state.resumen.denominador + ' | Numerador: ' + state.resumen.numerador + ' | % Avance: ' + state.resumen.porcentaje.toFixed(2) + '%'],
-            [],
-            [],
-            columns,
-            ...dataRows
-        ];
-        
-        const ws = XLSX.utils.aoa_to_sheet(wsData);
-        
-        // Configurar columnas
-        ws['!cols'] = columns.map(col => ({
-            wch: Math.max(col.length * 1.2, 15)
-        }));
-        
-        // Fusiones
-        const merges = [];
-        for (let i = 0; i < 4; i++) {
-            merges.push({ s: { r: i, c: 0 }, e: { r: i, c: columns.length - 1 } });
-        }
-        ws['!merges'] = merges;
-        
-        // === ESTILOS (requiere xlsx-style) ===
-        const style = {
-            fill: { fgColor: { rgb: "1B4F72" } },
-            font: { color: { rgb: "FFFFFF" }, bold: true },
-            alignment: { horizontal: "center", vertical: "center" }
-        };
-        
-        // Aplicar estilos a las celdas del encabezado
-        const headerRowNum = 5; // Fila donde está el encabezado
-        columns.forEach((col, idx) => {
-            const cellRef = XLSX.utils.encode_cell({ r: headerRowNum, c: idx });
-            if (!ws[cellRef]) ws[cellRef] = { v: col };
-            ws[cellRef].s = style;
-        });
-        
-        // Estilo para el título
-        const titleStyle = {
-            font: { bold: true, size: 14, color: { rgb: "1B4F72" } },
-            alignment: { horizontal: "center", vertical: "center" }
-        };
-        ws['A1'].s = titleStyle;
-        
-        // Estilo para el resumen
-        const resumenStyle = {
-            font: { bold: true, color: { rgb: "B7950B" } },
-            fill: { fgColor: { rgb: "FEF9E7" } },
-            alignment: { horizontal: "center", vertical: "center" }
-        };
-        ws['A3'].s = resumenStyle;
-        
-        // Estilo para numerador = 1
-        dataRows.forEach((row, rowIdx) => {
-            const numIdx = columns.indexOf('NUMERADOR');
-            if (numIdx !== -1 && row[numIdx] === 1) {
-                const cellRef = XLSX.utils.encode_cell({ 
-                    r: headerRowNum + 1 + rowIdx, 
-                    c: numIdx 
-                });
-                if (ws[cellRef]) {
-                    ws[cellRef].s = {
-                        fill: { fgColor: { rgb: "C6EFCE" } },
-                        font: { bold: true }
-                    };
-                }
-            }
-        });
+        const data = state.resultado.map(row => ({...row}));
+        const ws = XLSX.utils.json_to_sheet(data);
         
         XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
         
-        // Generar archivo
         const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
         const blob = new Blob([wbout], { type: 'application/octet-stream' });
         
@@ -535,8 +614,7 @@ function exportToExcel() {
         link.click();
         URL.revokeObjectURL(link.href);
         
-        addLog('✅ Reporte exportado con formato premium');
-        
+        addLog('✅ Reporte exportado a Excel');
     } catch (error) {
         addLog('❌ Error al exportar: ' + error.message);
         alert('Error al exportar: ' + error.message);
