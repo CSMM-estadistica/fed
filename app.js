@@ -249,30 +249,6 @@ function cargarDatosSQLite(db) {
 }
 
 function queryVI0101(f_i, f_f) {
-    return `WITH APN AS (SELECT Id_Paciente, Id_Establecimiento, Fecha_Atencion AS Fecha_APN
-        FROM NominalTrama WHERE Fecha_Atencion BETWEEN '${f_i}' AND '${f_f}'
-        AND Codigo_Item IN ('Z3491','Z3492','Z3493','Z3591','Z3592','Z3593')
-        GROUP BY Id_Paciente, Id_Establecimiento, Fecha_Atencion),
-    TAMIZAJE AS (SELECT Id_Paciente, Id_Establecimiento, MIN(Fecha_Atencion) AS Fecha_Tamizaje
-        FROM NominalTrama WHERE Codigo_Item = '96150.01' GROUP BY Id_Paciente, Id_Establecimiento),
-    POSITIVO AS (SELECT Id_Paciente, Id_Establecimiento, Fecha_Atencion AS Fecha_R456
-        FROM NominalTrama WHERE Codigo_Item = 'R456' AND Tipo_Diagnostico = 'D'
-        GROUP BY Id_Paciente, Id_Establecimiento, Fecha_Atencion),
-    GESTANTES AS (SELECT A.Id_Paciente, A.Id_Establecimiento, A.Fecha_APN, 1 AS DENOMINADOR,
-        CASE WHEN R.Id_Paciente IS NOT NULL AND R.Fecha_R456 = A.Fecha_APN THEN 1 ELSE 0 END AS NUMERADOR
-        FROM APN A INNER JOIN TAMIZAJE T ON T.Id_Paciente = A.Id_Paciente
-        AND T.Id_Establecimiento = A.Id_Establecimiento
-        LEFT JOIN POSITIVO R ON R.Id_Paciente = A.Id_Paciente
-        AND R.Id_Establecimiento = A.Id_Establecimiento)
-    SELECT P.Historia_Clinica AS NUM_HISTORIA, P.Numero_Documento AS DNI_PACIENTE,
-        P.Apellido_Paterno_Paciente || ' ' || P.Apellido_Materno_Paciente || ' ' || P.Nombres_Paciente AS PACIENTE,
-        MIN(G.Fecha_APN) AS PRIMERA_FECHA_ATENCION, MAX(N.Anio_Actual_Paciente) AS EDAD_ANIO,
-        MAX(G.DENOMINADOR) AS DENOMINADOR, MAX(G.NUMERADOR) AS NUMERADOR
-    FROM GESTANTES G INNER JOIN MaestroPaciente P ON P.Id_Paciente = G.Id_Paciente
-    INNER JOIN NominalTrama N ON N.Id_Paciente = G.Id_Paciente
-    GROUP BY P.Id_Paciente, P.Numero_Documento, PACIENTE ORDER BY PRIMERA_FECHA_ATENCION`;
-}
-function queryVI0101(f_i, f_f) {
     return `WITH APN AS (
         SELECT 
             Id_Paciente, 
@@ -453,15 +429,56 @@ function exportToExcel() {
     }
     
     try {
+        // Crear libro de trabajo
         const wb = XLSX.utils.book_new();
-        const data = state.resultado.map(row => ({...row}));
-        const ws = XLSX.utils.json_to_sheet(data);
         
+        // Preparar datos
+        const data = state.resultado.map(row => ({...row}));
+        
+        // Agregar filas de resumen
+        const resumenData = [
+            ['REPORTE NOMINAL DE PACIENTES ÚNICOS - ' + document.getElementById('indicadorSelect').value],
+            ['Pacientes únicos totales: ' + state.resumen.total + ' | Fecha proceso: ' + new Date().toLocaleString()],
+            ['RESUMEN -> Denominador: ' + state.resumen.denominador + ' | Numerador: ' + state.resumen.numerador + ' | % Avance: ' + state.resumen.porcentaje.toFixed(2) + '%'],
+            [],
+            []
+        ];
+        
+        // Obtener columnas y datos
+        const columns = Object.keys(data[0] || {});
+        const headerRow = columns;
+        
+        // Crear array de datos con encabezados
+        const dataRows = data.map(row => columns.map(col => row[col] || ''));
+        
+        // Combinar todo
+        const allData = [...resumenData, headerRow, ...dataRows];
+        
+        // Crear hoja de trabajo
+        const ws = XLSX.utils.aoa_to_sheet(allData);
+        
+        // Establecer anchos de columna
+        const colWidths = columns.map(col => ({
+            wch: Math.max(col.length * 1.2, 15)
+        }));
+        ws['!cols'] = colWidths;
+        
+        // Fusionar celdas para el título
+        ws['!merges'] = [
+            { s: { r: 0, c: 0 }, e: { r: 0, c: columns.length - 1 } },
+            { s: { r: 1, c: 0 }, e: { r: 1, c: columns.length - 1 } },
+            { s: { r: 2, c: 0 }, e: { r: 2, c: columns.length - 1 } },
+            { s: { r: 3, c: 0 }, e: { r: 3, c: columns.length - 1 } }
+        ];
+        
+        // Agregar hoja al libro
         XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
         
+        // Generar archivo
         const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
         const blob = new Blob([wbout], { type: 'application/octet-stream' });
         
+        // Descargar
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         const fecha = new Date().toISOString().split('T')[0];
@@ -469,7 +486,8 @@ function exportToExcel() {
         link.click();
         URL.revokeObjectURL(link.href);
         
-        addLog('✅ Reporte exportado a Excel');
+        addLog('✅ Reporte exportado a Excel con formato premium');
+        
     } catch (error) {
         addLog('❌ Error al exportar: ' + error.message);
         alert('Error al exportar: ' + error.message);
