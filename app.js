@@ -347,9 +347,6 @@ function cargarDatosMaestroSQLite(db) {
 }
 
 // ============================================================
-// QUERY VI-01.01 - VERSIÓN CORREGIDA
-// ============================================================
-// ============================================================
 // QUERY VI-01.01 - VERSIÓN CORREGIDA (DENOMINADOR MISMA FECHA)
 // ============================================================
 function queryVI0101(f_i, f_f) {
@@ -669,8 +666,9 @@ function mostrarResultados(df, resumen) {
     document.getElementById('rowCount').textContent = `${df.length} filas`;
 }
 
+
 // ============================================================
-// EXPORTAR A EXCEL
+// EXPORTAR A EXCEL - VERSIÓN HTML (Más compatible)
 // ============================================================
 function exportToExcel() {
     if (!state.resultado || state.resultado.length === 0) {
@@ -679,105 +677,163 @@ function exportToExcel() {
     }
     
     try {
-        const wb = XLSX.utils.book_new();
-        
-        // Preparar datos con formato
         const data = state.resultado.map(row => ({...row}));
         const columns = Object.keys(data[0] || {});
         
-        // Crear hoja
-        const wsData = [
-            ['REPORTE NOMINAL DE PACIENTES ÚNICOS - ' + document.getElementById('indicadorSelect').value],
-            ['Pacientes únicos totales: ' + state.resumen.total + ' | Fecha proceso: ' + new Date().toLocaleString()],
-            ['RESUMEN -> Denominador: ' + state.resumen.denominador + ' | Numerador: ' + state.resumen.numerador + ' | % Avance: ' + state.resumen.porcentaje.toFixed(2) + '%'],
-            [],
-            [],
-            columns,
-            ...data.map(row => columns.map(col => row[col] !== undefined ? row[col] : ''))
-        ];
-        
-        const ws = XLSX.utils.aoa_to_sheet(wsData);
-        
-        // Anchos de columna
-        ws['!cols'] = columns.map(col => ({
-            wch: Math.max(col.length * 1.2, 15)
-        }));
-        
-        // Fusiones
-        const merges = [];
-        for (let i = 0; i < 4; i++) {
-            merges.push({ s: { r: i, c: 0 }, e: { r: i, c: columns.length - 1 } });
-        }
-        ws['!merges'] = merges;
-        
-        // Estilos usando xlsx-style
-        try {
-            // Título
-            if (ws['A1']) {
-                ws['A1'].s = {
-                    font: { bold: true, size: 14, color: { rgb: "1B4F72" } },
-                    alignment: { horizontal: "center", vertical: "center" }
-                };
-            }
-            
-            // Resumen
-            if (ws['A3']) {
-                ws['A3'].s = {
-                    font: { bold: true, color: { rgb: "B7950B" } },
-                    fill: { fgColor: { rgb: "FEF9E7" } },
-                    alignment: { horizontal: "center", vertical: "center" }
-                };
-            }
-            
-            // Encabezados (fila 5)
-            const headerRow = 5;
-            columns.forEach((col, idx) => {
-                const cellRef = XLSX.utils.encode_cell({ r: headerRow, c: idx });
-                if (ws[cellRef]) {
-                    ws[cellRef].s = {
-                        font: { bold: true, color: { rgb: "FFFFFF" } },
-                        fill: { fgColor: { rgb: "1B4F72" } },
-                        alignment: { horizontal: "center", vertical: "center" }
-                    };
+        // Construir tabla HTML con estilos
+        let html = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" 
+              xmlns:x="urn:schemas-microsoft-com:office:excel" 
+              xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+            <meta charset="UTF-8">
+            <!--[if gte mso 9]>
+            <xml>
+                <x:ExcelWorkbook>
+                    <x:ExcelWorksheets>
+                        <x:ExcelWorksheet>
+                            <x:Name>Reporte</x:Name>
+                            <x:WorksheetOptions>
+                                <x:DisplayGridlines/>
+                            </x:WorksheetOptions>
+                        </x:ExcelWorksheet>
+                    </x:ExcelWorksheets>
+                </x:ExcelWorkbook>
+            </xml>
+            <![endif]-->
+            <style>
+                /* Estilos para Excel */
+                .title {
+                    font-size: 18pt;
+                    font-weight: bold;
+                    color: #1B4F72;
+                    text-align: center;
+                    border: none;
                 }
-            });
-            
-            // Numerador = 1 (verde)
-            const numIdx = columns.indexOf('NUMERADOR');
-            if (numIdx !== -1) {
-                data.forEach((row, rowIdx) => {
-                    if (row.NUMERADOR === 1) {
-                        const cellRef = XLSX.utils.encode_cell({ 
-                            r: headerRow + 1 + rowIdx, 
-                            c: numIdx 
-                        });
-                        if (ws[cellRef]) {
-                            ws[cellRef].s = {
-                                fill: { fgColor: { rgb: "C6EFCE" } },
-                                font: { bold: true, color: { rgb: "006100" } }
-                            };
-                        }
-                    }
-                });
-            }
-        } catch (e) {
-            // Si no soporta estilos, continúa sin ellos
-            console.log('Estilos no disponibles, continuando sin formato');
-        }
+                .subtitle {
+                    font-size: 12pt;
+                    font-weight: bold;
+                    color: #2E86C1;
+                    text-align: center;
+                    border: none;
+                }
+                .resumen {
+                    font-size: 12pt;
+                    font-weight: bold;
+                    color: #B7950B;
+                    background-color: #FEF9E7;
+                    text-align: center;
+                    border: none;
+                }
+                .header {
+                    font-size: 11pt;
+                    font-weight: bold;
+                    color: #FFFFFF;
+                    background-color: #1B4F72;
+                    text-align: center;
+                    border: 1px solid #FFFFFF;
+                    padding: 6px;
+                }
+                .data-even {
+                    background-color: #F8F9FA;
+                    border: 1px solid #DEE2E6;
+                    padding: 4px 6px;
+                }
+                .data-odd {
+                    background-color: #FFFFFF;
+                    border: 1px solid #DEE2E6;
+                    padding: 4px 6px;
+                }
+                .numerador-1 {
+                    background-color: #C6EFCE !important;
+                    font-weight: bold;
+                    color: #006100;
+                    border: 1px solid #DEE2E6;
+                    padding: 4px 6px;
+                }
+                .denominador-1 {
+                    background-color: #D6EAF8 !important;
+                    font-weight: bold;
+                    color: #1B4F72;
+                    border: 1px solid #DEE2E6;
+                    padding: 4px 6px;
+                }
+                .fecha {
+                    mso-number-format: "yyyy-mm-dd";
+                }
+                table {
+                    border-collapse: collapse;
+                    width: 100%;
+                }
+                td, th {
+                    padding: 4px 8px;
+                }
+                .separator {
+                    height: 10px;
+                    border: none;
+                }
+            </style>
+        </head>
+        <body>
+            <table>
+                <!-- Título -->
+                <tr><td colspan="${columns.length}" class="title">
+                    REPORTE NOMINAL DE PACIENTES ÚNICOS
+                </td></tr>
+                <!-- Subtítulo -->
+                <tr><td colspan="${columns.length}" class="subtitle">
+                    Indicador: ${document.getElementById('indicadorSelect').value}
+                </td></tr>
+                <!-- Fecha -->
+                <tr><td colspan="${columns.length}" class="subtitle" style="font-size:10pt;color:#6C757D;">
+                    Pacientes únicos totales: ${state.resumen.total} | Fecha proceso: ${new Date().toLocaleString()}
+                </td></tr>
+                <!-- Resumen -->
+                <tr><td colspan="${columns.length}" class="resumen">
+                    RESUMEN → Denominador: ${state.resumen.denominador} | 
+                    Numerador: ${state.resumen.numerador} | 
+                    % Avance: ${state.resumen.porcentaje.toFixed(2)}%
+                </td></tr>
+                <!-- Separador -->
+                <tr><td colspan="${columns.length}" class="separator"></td></tr>
+                <!-- Encabezados -->
+                <tr>
+                    ${columns.map(col => `<th class="header">${col}</th>`).join('')}
+                </tr>
+                <!-- Datos -->
+                ${data.map((row, idx) => {
+                    const rowClass = idx % 2 === 0 ? 'data-even' : 'data-odd';
+                    return `<tr>
+                        ${columns.map(col => {
+                            const value = row[col] !== undefined ? row[col] : '';
+                            let cellClass = rowClass;
+                            if (col === 'NUMERADOR' && value === 1) cellClass = 'numerador-1';
+                            if (col === 'DENOMINADOR' && value === 1) cellClass = 'denominador-1';
+                            return `<td class="${cellClass}">${value}</td>`;
+                        }).join('')}
+                    </tr>`;
+                }).join('')}
+            </table>
+        </body>
+        </html>`;
         
-        XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
+        // Crear blob
+        const blob = new Blob([html], { 
+            type: 'application/vnd.ms-excel' 
+        });
         
-        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-        const blob = new Blob([wbout], { type: 'application/octet-stream' });
-        
+        // Descargar
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         const fecha = new Date().toISOString().split('T')[0];
-        link.download = `INDICADOR_VI-01_${fecha}.xlsx`;
+        link.download = `INDICADOR_VI-01_${fecha}.xls`;
+        document.body.appendChild(link);
         link.click();
-        URL.revokeObjectURL(link.href);
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(link.href), 1000);
         
-        addLog('✅ Reporte exportado a Excel con formato premium');
+        addLog('✅ Reporte exportado a Excel con diseño premium (HTML)');
+        
     } catch (error) {
         addLog('❌ Error al exportar: ' + error.message);
         alert('Error al exportar: ' + error.message);
