@@ -2,12 +2,13 @@
 // ESTADO GLOBAL - MÚLTIPLES ARCHIVOS
 // ============================================================
 const state = {
-    nominalData: [],      // ← Ahora es un ARRAY de DataFrames
-    nominalFiles: [],     // ← Lista de nombres de archivos cargados
+    nominalData: [],
+    nominalFiles: [],
     maestro: null,
     resultado: null,
     resumen: null,
-    procesando: false
+    procesando: false,
+    columnMapping: {} // ← Para guardar el mapeo de columnas
 };
 
 // ============================================================
@@ -21,14 +22,60 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('fechaInicio').value = hace6Meses.toISOString().split('T')[0];
     document.getElementById('fechaFin').value = hoy.toISOString().split('T')[0];
     
-    // Event listeners
     document.getElementById('nominalFile').addEventListener('change', handleNominalFiles);
     document.getElementById('maestroFile').addEventListener('change', handleMaestroFile);
     document.getElementById('btnProcesar').addEventListener('click', procesar);
 });
 
 // ============================================================
-// MANEJO DE ARCHIVOS NOMINAL - MÚLTIPLES
+// DETECTAR NOMBRES DE COLUMNAS AUTOMÁTICAMENTE
+// ============================================================
+function detectarColumnas(primerFila) {
+    const keys = Object.keys(primerFila);
+    const mapping = {};
+    
+    // Posibles nombres para cada columna
+    const posibles = {
+        'Id_Paciente': ['id_paciente', 'idpaciente', 'paciente_id', 'pacienteid', 'id_pac', 'idpac'],
+        'Id_Establecimiento': ['id_establecimiento', 'idestablecimiento', 'establecimiento_id', 'establecid', 'id_estab'],
+        'Fecha_Atencion': ['fecha_atencion', 'fechaatencion', 'fecha_at', 'fecha', 'atencion_fecha'],
+        'Codigo_Item': ['codigo_item', 'codigoitem', 'codigo', 'item', 'cod_item', 'coditem', 'codigo_atencion'],
+        'Tipo_Diagnostico': ['tipo_diagnostico', 'tipodiagnostico', 'tipo_diag', 'diagnostico_tipo', 'tipo'],
+        'Anio_Actual_Paciente': ['anio_actual_paciente', 'anio_paciente', 'edad', 'anio_actual', 'edad_paciente'],
+        'Historia_Clinica': ['historia_clinica', 'historiaclinica', 'historia', 'hc', 'num_historia', 'nro_historia']
+    };
+    
+    for (const [target, alternativas] of Object.entries(posibles)) {
+        let encontrado = false;
+        for (const alt of alternativas) {
+            const match = keys.find(k => k.toLowerCase().trim() === alt.toLowerCase().trim());
+            if (match) {
+                mapping[target] = match;
+                encontrado = true;
+                break;
+            }
+        }
+        if (!encontrado) {
+            // Buscar coincidencia parcial
+            for (const alt of alternativas) {
+                const match = keys.find(k => k.toLowerCase().includes(alt.toLowerCase()) || alt.toLowerCase().includes(k.toLowerCase()));
+                if (match) {
+                    mapping[target] = match;
+                    encontrado = true;
+                    break;
+                }
+            }
+        }
+        if (!encontrado) {
+            mapping[target] = target; // Usar el nombre por defecto
+        }
+    }
+    
+    return mapping;
+}
+
+// ============================================================
+// MANEJO DE ARCHIVOS NOMINAL - CON DETECCIÓN AUTOMÁTICA
 // ============================================================
 function handleNominalFiles(event) {
     const files = event.target.files;
@@ -36,40 +83,59 @@ function handleNominalFiles(event) {
     
     let archivosCargados = 0;
     let registrosTotales = 0;
+    let primerArchivo = true;
     
-    // Procesar cada archivo
-    Array.from(files).forEach((file, index) => {
+    Array.from(files).forEach((file) => {
         const reader = new FileReader();
         reader.onload = function(e) {
             try {
                 const result = Papa.parse(e.target.result, { 
                     header: true, 
-                    skipEmptyLines: true 
+                    skipEmptyLines: true,
+                    trimHeaders: true
                 });
                 
-                // Agregar al array de datos
+                // Detectar columnas con el primer archivo
+                if (primerArchivo && result.data.length > 0) {
+                    state.columnMapping = detectarColumnas(result.data[0]);
+                    primerArchivo = false;
+                    
+                    // Mostrar mapeo en log
+                    addLog('📋 MAPEO DE COLUMNAS DETECTADO:');
+                    for (const [key, value] of Object.entries(state.columnMapping)) {
+                        addLog(`   ${key} → "${value}"`);
+                    }
+                }
+                
+                // Mapear datos usando las columnas detectadas
+                const mappedData = result.data.map(row => {
+                    const mapped = {};
+                    for (const [key, colName] of Object.entries(state.columnMapping)) {
+                        mapped[key] = row[colName] !== undefined ? row[colName] : '';
+                    }
+                    return mapped;
+                });
+                
                 state.nominalData.push({
                     nombre: file.name,
-                    data: result.data
+                    data: mappedData
                 });
                 
                 archivosCargados++;
-                registrosTotales += result.data.length;
+                registrosTotales += mappedData.length;
                 
-                // Actualizar UI
                 document.getElementById('nominalStatus').textContent = `✅ ${archivosCargados} archivo(s) cargado(s)`;
                 document.getElementById('nominalStatus').className = 'file-status loaded';
                 document.getElementById('nominalFileCountDisplay').textContent = archivosCargados;
                 document.getElementById('nominalCount').textContent = registrosTotales;
                 
-                // Mostrar nombres de archivos
                 const nombres = state.nominalData.map(d => d.nombre).join(', ');
                 document.getElementById('nominalFileCount').textContent = `📁 ${nombres}`;
                 
                 const box = document.getElementById('nominalUpload');
                 box.classList.add('loaded');
                 
-                addLog(`✅ Cargado: ${file.name} (${result.data.length} registros)`);
+                addLog(`✅ Cargado: ${file.name} (${mappedData.length} registros)`);
                 addLog(`📊 Total acumulado: ${registrosTotales} registros en ${archivosCargados} archivos`);
                 
                 checkReady();
@@ -143,7 +209,7 @@ function clearLog() {
 }
 
 // ============================================================
-// PROCESAMIENTO - CON DATOS ACUMULADOS
+// PROCESAMIENTO
 // ============================================================
 async function procesar() {
     if (state.procesando) return;
@@ -172,11 +238,9 @@ async function procesar() {
         addLog('⏳ Cargando datos acumulados...');
         updateProgress(10);
         
-        // Cargar TODOS los archivos Nominal acumulados
         cargarDatosNominalSQLite(db);
         updateProgress(40);
         
-        // Cargar Maestro
         cargarDatosMaestroSQLite(db);
         updateProgress(50);
         
@@ -274,10 +338,9 @@ function cargarSQLJS() {
 }
 
 // ============================================================
-// CARGA DE DATOS NOMINAL - TODOS LOS ARCHIVOS
+// CARGA DE DATOS NOMINAL
 // ============================================================
 function cargarDatosNominalSQLite(db) {
-    // Crear tabla
     db.run(`CREATE TABLE NominalTrama (
         Id_Paciente TEXT,
         Id_Establecimiento TEXT,
@@ -295,8 +358,7 @@ function cargarDatosNominalSQLite(db) {
     
     let totalInsertados = 0;
     
-    // Recorrer TODOS los archivos cargados
-    state.nominalData.forEach((archivo, idx) => {
+    state.nominalData.forEach((archivo) => {
         const data = archivo.data;
         addLog(`⏳ Insertando ${data.length} registros de ${archivo.nombre}...`);
         
@@ -311,7 +373,6 @@ function cargarDatosNominalSQLite(db) {
         addLog(`✅ ${archivo.nombre}: ${data.length} registros insertados`);
     });
     
-    // Crear índices para mejorar performance
     db.run('CREATE INDEX idx_nominal_paciente ON NominalTrama(Id_Paciente)');
     db.run('CREATE INDEX idx_nominal_fecha ON NominalTrama(Fecha_Atencion)');
     db.run('CREATE INDEX idx_nominal_codigo ON NominalTrama(Codigo_Item)');
@@ -347,18 +408,17 @@ function cargarDatosMaestroSQLite(db) {
 }
 
 // ============================================================
-// QUERY VI-01.01 - VERSIÓN CORREGIDA (DENOMINADOR MISMA FECHA)
+// QUERY VI-01.01
 // ============================================================
 function queryVI0101(f_i, f_f) {
     return `WITH ATENCIONES AS (
         SELECT 
             Id_Paciente, 
             Id_Establecimiento, 
-            Fecha_Atencion AS Fecha_Atencion
+            Fecha_Atencion
         FROM NominalTrama 
         WHERE Fecha_Atencion BETWEEN '${f_i}' AND '${f_f}'
     ),
-    -- APN: códigos Z34% o Z35%
     APN AS (
         SELECT 
             Id_Paciente, 
@@ -367,7 +427,6 @@ function queryVI0101(f_i, f_f) {
         FROM ATENCIONES 
         WHERE Codigo_Item IN ('Z3491','Z3492','Z3493','Z3591','Z3592','Z3593')
     ),
-    -- TAMIZAJE: código 96150.01
     TAMIZAJE AS (
         SELECT 
             Id_Paciente, 
@@ -376,17 +435,15 @@ function queryVI0101(f_i, f_f) {
         FROM ATENCIONES 
         WHERE Codigo_Item = '96150.01'
     ),
-    -- POSITIVO: R456 tipo D
     POSITIVO AS (
         SELECT 
             Id_Paciente, 
             Id_Establecimiento, 
             Fecha_Atencion AS Fecha_Positivo
         FROM ATENCIONES 
-        WHERE Codigo_Item = 'R456' 
+        WHERE Codigo_Item LIKE '%R456%' 
           AND Tipo_Diagnostico = 'D'
     ),
-    -- DENOMINADOR: APN + TAMIZAJE en la MISMA FECHA y mismo establecimiento
     DENOMINADOR AS (
         SELECT 
             A.Id_Paciente,
@@ -398,10 +455,9 @@ function queryVI0101(f_i, f_f) {
         INNER JOIN TAMIZAJE T 
             ON T.Id_Paciente = A.Id_Paciente 
             AND T.Id_Establecimiento = A.Id_Establecimiento
-            AND T.Fecha_Tamizaje = A.Fecha_APN  -- ✅ MISMA FECHA
+            AND T.Fecha_Tamizaje = A.Fecha_APN
         GROUP BY A.Id_Paciente, A.Id_Establecimiento, A.Fecha_APN, T.Fecha_Tamizaje
     ),
-    -- NUMERADOR: DENOMINADOR + POSITIVO en la MISMA FECHA
     NUMERADOR AS (
         SELECT 
             D.Id_Paciente,
@@ -411,7 +467,7 @@ function queryVI0101(f_i, f_f) {
             D.DENOMINADOR,
             CASE 
                 WHEN P.Id_Paciente IS NOT NULL 
-                 AND P.Fecha_Positivo = D.Fecha_APN  -- ✅ MISMA FECHA
+                 AND P.Fecha_Positivo = D.Fecha_APN
                 THEN 1 
                 ELSE 0 
             END AS NUMERADOR,
@@ -420,7 +476,7 @@ function queryVI0101(f_i, f_f) {
         LEFT JOIN POSITIVO P 
             ON P.Id_Paciente = D.Id_Paciente 
             AND P.Id_Establecimiento = D.Id_Establecimiento
-            AND P.Fecha_Positivo = D.Fecha_APN  -- ✅ MISMA FECHA
+            AND P.Fecha_Positivo = D.Fecha_APN
     )
     SELECT 
         P.Numero_Documento AS DNI_PACIENTE,
@@ -445,7 +501,7 @@ function queryVI0101(f_i, f_f) {
 }
 
 // ============================================================
-// QUERY VI-01.02 - VERSIÓN CORREGIDA
+// QUERY VI-01.02
 // ============================================================
 function queryVI0102(f_i, f_f) {
     return `WITH APN AS (
@@ -460,7 +516,7 @@ function queryVI0102(f_i, f_f) {
     ),
     VIOLENCIA AS (
         SELECT Id_Paciente, Id_Establecimiento, Fecha_Atencion AS Fecha_R456
-        FROM NominalTrama WHERE Codigo_Item = 'R456' AND Tipo_Diagnostico = 'D'
+        FROM NominalTrama WHERE Codigo_Item LIKE '%R456%' AND Tipo_Diagnostico = 'D'
     ),
     DX AS (
         SELECT 
@@ -666,9 +722,8 @@ function mostrarResultados(df, resumen) {
     document.getElementById('rowCount').textContent = `${df.length} filas`;
 }
 
-
 // ============================================================
-// EXPORTAR A EXCEL - VERSIÓN HTML (Más compatible)
+// EXPORTAR A EXCEL - VERSIÓN HTML PREMIUM
 // ============================================================
 function exportToExcel() {
     if (!state.resultado || state.resultado.length === 0) {
@@ -680,7 +735,6 @@ function exportToExcel() {
         const data = state.resultado.map(row => ({...row}));
         const columns = Object.keys(data[0] || {});
         
-        // Construir tabla HTML con estilos
         let html = `
         <html xmlns:o="urn:schemas-microsoft-com:office:office" 
               xmlns:x="urn:schemas-microsoft-com:office:excel" 
@@ -702,127 +756,42 @@ function exportToExcel() {
             </xml>
             <![endif]-->
             <style>
-                /* Estilos para Excel */
-                .title {
-                    font-size: 18pt;
-                    font-weight: bold;
-                    color: #1B4F72;
-                    text-align: center;
-                    border: none;
-                }
-                .subtitle {
-                    font-size: 12pt;
-                    font-weight: bold;
-                    color: #2E86C1;
-                    text-align: center;
-                    border: none;
-                }
-                .resumen {
-                    font-size: 12pt;
-                    font-weight: bold;
-                    color: #B7950B;
-                    background-color: #FEF9E7;
-                    text-align: center;
-                    border: none;
-                }
-                .header {
-                    font-size: 11pt;
-                    font-weight: bold;
-                    color: #FFFFFF;
-                    background-color: #1B4F72;
-                    text-align: center;
-                    border: 1px solid #FFFFFF;
-                    padding: 6px;
-                }
-                .data-even {
-                    background-color: #F8F9FA;
-                    border: 1px solid #DEE2E6;
-                    padding: 4px 6px;
-                }
-                .data-odd {
-                    background-color: #FFFFFF;
-                    border: 1px solid #DEE2E6;
-                    padding: 4px 6px;
-                }
-                .numerador-1 {
-                    background-color: #C6EFCE !important;
-                    font-weight: bold;
-                    color: #006100;
-                    border: 1px solid #DEE2E6;
-                    padding: 4px 6px;
-                }
-                .denominador-1 {
-                    background-color: #D6EAF8 !important;
-                    font-weight: bold;
-                    color: #1B4F72;
-                    border: 1px solid #DEE2E6;
-                    padding: 4px 6px;
-                }
-                .fecha {
-                    mso-number-format: "yyyy-mm-dd";
-                }
-                table {
-                    border-collapse: collapse;
-                    width: 100%;
-                }
-                td, th {
-                    padding: 4px 8px;
-                }
-                .separator {
-                    height: 10px;
-                    border: none;
-                }
+                .title { font-size: 18pt; font-weight: bold; color: #1B4F72; text-align: center; border: none; }
+                .subtitle { font-size: 12pt; font-weight: bold; color: #2E86C1; text-align: center; border: none; }
+                .resumen { font-size: 12pt; font-weight: bold; color: #B7950B; background-color: #FEF9E7; text-align: center; border: none; }
+                .header { font-size: 11pt; font-weight: bold; color: #FFFFFF; background-color: #1B4F72; text-align: center; border: 1px solid #FFFFFF; padding: 6px; }
+                .data-even { background-color: #F8F9FA; border: 1px solid #DEE2E6; padding: 4px 6px; }
+                .data-odd { background-color: #FFFFFF; border: 1px solid #DEE2E6; padding: 4px 6px; }
+                .numerador-1 { background-color: #C6EFCE !important; font-weight: bold; color: #006100; border: 1px solid #DEE2E6; padding: 4px 6px; }
+                .denominador-1 { background-color: #D6EAF8 !important; font-weight: bold; color: #1B4F72; border: 1px solid #DEE2E6; padding: 4px 6px; }
+                table { border-collapse: collapse; width: 100%; }
+                td, th { padding: 4px 8px; }
+                .separator { height: 10px; border: none; }
             </style>
         </head>
         <body>
             <table>
-                <!-- Título -->
-                <tr><td colspan="${columns.length}" class="title">
-                    REPORTE NOMINAL DE PACIENTES ÚNICOS
-                </td></tr>
-                <!-- Subtítulo -->
-                <tr><td colspan="${columns.length}" class="subtitle">
-                    Indicador: ${document.getElementById('indicadorSelect').value}
-                </td></tr>
-                <!-- Fecha -->
-                <tr><td colspan="${columns.length}" class="subtitle" style="font-size:10pt;color:#6C757D;">
-                    Pacientes únicos totales: ${state.resumen.total} | Fecha proceso: ${new Date().toLocaleString()}
-                </td></tr>
-                <!-- Resumen -->
-                <tr><td colspan="${columns.length}" class="resumen">
-                    RESUMEN → Denominador: ${state.resumen.denominador} | 
-                    Numerador: ${state.resumen.numerador} | 
-                    % Avance: ${state.resumen.porcentaje.toFixed(2)}%
-                </td></tr>
-                <!-- Separador -->
+                <tr><td colspan="${columns.length}" class="title">REPORTE NOMINAL DE PACIENTES ÚNICOS</td></tr>
+                <tr><td colspan="${columns.length}" class="subtitle">Indicador: ${document.getElementById('indicadorSelect').value}</td></tr>
+                <tr><td colspan="${columns.length}" class="subtitle" style="font-size:10pt;color:#6C757D;">Pacientes únicos totales: ${state.resumen.total} | Fecha proceso: ${new Date().toLocaleString()}</td></tr>
+                <tr><td colspan="${columns.length}" class="resumen">RESUMEN → Denominador: ${state.resumen.denominador} | Numerador: ${state.resumen.numerador} | % Avance: ${state.resumen.porcentaje.toFixed(2)}%</td></tr>
                 <tr><td colspan="${columns.length}" class="separator"></td></tr>
-                <!-- Encabezados -->
-                <tr>
-                    ${columns.map(col => `<th class="header">${col}</th>`).join('')}
-                </tr>
-                <!-- Datos -->
+                <tr>${columns.map(col => `<th class="header">${col}</th>`).join('')}</tr>
                 ${data.map((row, idx) => {
                     const rowClass = idx % 2 === 0 ? 'data-even' : 'data-odd';
-                    return `<tr>
-                        ${columns.map(col => {
-                            const value = row[col] !== undefined ? row[col] : '';
-                            let cellClass = rowClass;
-                            if (col === 'NUMERADOR' && value === 1) cellClass = 'numerador-1';
-                            if (col === 'DENOMINADOR' && value === 1) cellClass = 'denominador-1';
-                            return `<td class="${cellClass}">${value}</td>`;
-                        }).join('')}
-                    </tr>`;
+                    return `<tr>${columns.map(col => {
+                        const value = row[col] !== undefined ? row[col] : '';
+                        let cellClass = rowClass;
+                        if (col === 'NUMERADOR' && value === 1) cellClass = 'numerador-1';
+                        if (col === 'DENOMINADOR' && value === 1) cellClass = 'denominador-1';
+                        return `<td class="${cellClass}">${value}</td>`;
+                    }).join('')}</tr>`;
                 }).join('')}
             </table>
         </body>
         </html>`;
         
-        // Crear blob
-        const blob = new Blob([html], { 
-            type: 'application/vnd.ms-excel' 
-        });
-        
-        // Descargar
+        const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         const fecha = new Date().toISOString().split('T')[0];
@@ -832,7 +801,7 @@ function exportToExcel() {
         document.body.removeChild(link);
         setTimeout(() => URL.revokeObjectURL(link.href), 1000);
         
-        addLog('✅ Reporte exportado a Excel con diseño premium (HTML)');
+        addLog('✅ Reporte exportado a Excel con diseño premium');
         
     } catch (error) {
         addLog('❌ Error al exportar: ' + error.message);
