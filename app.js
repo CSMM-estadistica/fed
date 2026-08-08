@@ -263,10 +263,10 @@ function queryVI0101(f_i, f_f) {
         SELECT 
             Id_Paciente, 
             Id_Establecimiento, 
-            MIN(Fecha_Atencion) AS Fecha_Tamizaje
+            Fecha_Atencion AS Fecha_Tamizaje
         FROM NominalTrama 
         WHERE Codigo_Item = '96150.01'
-        GROUP BY Id_Paciente, Id_Establecimiento
+        GROUP BY Id_Paciente, Id_Establecimiento, Fecha_Atencion  -- ✅ Fecha específica
     ),
     POSITIVO AS (
         SELECT 
@@ -278,47 +278,61 @@ function queryVI0101(f_i, f_f) {
           AND Tipo_Diagnostico = 'D'
         GROUP BY Id_Paciente, Id_Establecimiento, Fecha_Atencion
     ),
-    GESTANTES AS (
+    -- ✅ DENOMINADOR: APN + TAMIZAJE (cualquier fecha, pero en el mismo establecimiento)
+    DENOMINADOR AS (
         SELECT 
             A.Id_Paciente,
             A.Id_Establecimiento,
             A.Fecha_APN,
             T.Fecha_Tamizaje,
-            R.Fecha_Positivo,
-            1 AS DENOMINADOR,
-            CASE 
-                WHEN R.Id_Paciente IS NOT NULL 
-                 AND R.Fecha_Positivo = A.Fecha_APN 
-                THEN 1 ELSE 0 
-            END AS NUMERADOR
+            1 AS DENOMINADOR
         FROM APN A
         INNER JOIN TAMIZAJE T 
             ON T.Id_Paciente = A.Id_Paciente 
             AND T.Id_Establecimiento = A.Id_Establecimiento
-        LEFT JOIN POSITIVO R 
-            ON R.Id_Paciente = A.Id_Paciente 
-            AND R.Id_Establecimiento = A.Id_Establecimiento
+        GROUP BY A.Id_Paciente, A.Id_Establecimiento, A.Fecha_APN, T.Fecha_Tamizaje
+    ),
+    -- ✅ NUMERADOR: APN + TAMIZAJE + POSITIVO (mismo día que APN)
+    NUMERADOR AS (
+        SELECT 
+            D.Id_Paciente,
+            D.Id_Establecimiento,
+            D.Fecha_APN,
+            D.Fecha_Tamizaje,
+            D.DENOMINADOR,
+            CASE 
+                WHEN P.Id_Paciente IS NOT NULL 
+                 AND P.Fecha_Positivo = D.Fecha_APN  -- ✅ MISMO DÍA que APN
+                THEN 1 
+                ELSE 0 
+            END AS NUMERADOR
+        FROM DENOMINADOR D
+        LEFT JOIN POSITIVO P 
+            ON P.Id_Paciente = D.Id_Paciente 
+            AND P.Id_Establecimiento = D.Id_Establecimiento
+            AND P.Fecha_Positivo = D.Fecha_APN  -- ✅ Condición de mismo día
     )
     SELECT 
         P.Numero_Documento AS DNI_PACIENTE,
         P.Apellido_Paterno_Paciente || ' ' || P.Apellido_Materno_Paciente || ' ' || P.Nombres_Paciente AS PACIENTE,
-        G.Fecha_APN AS "FECHA APN(Z34%-Z35%)",
-        G.Fecha_Tamizaje AS "FECHA TAMIZAJE VIOLENCIA",
-        G.Fecha_Positivo AS "FECHA POSITIVO",
-        G.DENOMINADOR,
-        G.NUMERADOR
-    FROM GESTANTES G
+        N.Fecha_APN AS "FECHA APN(Z34%-Z35%)",
+        N.Fecha_Tamizaje AS "FECHA TAMIZAJE VIOLENCIA",
+        MAX(POS.Fecha_Positivo) AS "FECHA POSITIVO",  -- ✅ Muestra la fecha del positivo si existe
+        MAX(N.DENOMINADOR) AS DENOMINADOR,
+        MAX(N.NUMERADOR) AS NUMERADOR
+    FROM NUMERADOR N
     INNER JOIN MaestroPaciente P 
-        ON P.Id_Paciente = G.Id_Paciente
+        ON P.Id_Paciente = N.Id_Paciente
+    LEFT JOIN POSITIVO POS
+        ON POS.Id_Paciente = N.Id_Paciente
+        AND POS.Id_Establecimiento = N.Id_Establecimiento
+        AND POS.Fecha_Positivo = N.Fecha_APN
     GROUP BY 
         P.Numero_Documento,
         PACIENTE,
-        G.Fecha_APN,
-        G.Fecha_Tamizaje,
-        G.Fecha_Positivo,
-        G.DENOMINADOR,
-        G.NUMERADOR
-    ORDER BY G.Fecha_APN`;
+        N.Fecha_APN,
+        N.Fecha_Tamizaje
+    ORDER BY N.Fecha_APN`;
 }
 function queryVI0102(f_i, f_f) {
     return `WITH APN AS (SELECT Id_Paciente, Id_Establecimiento, Fecha_Atencion AS Fecha_APN
