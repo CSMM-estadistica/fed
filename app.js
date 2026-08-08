@@ -429,56 +429,91 @@ function exportToExcel() {
     }
     
     try {
-        // Crear libro de trabajo
+        // Datos
+        const columns = Object.keys(state.resultado[0] || {});
+        const dataRows = state.resultado.map(row => columns.map(col => row[col] || ''));
+        
+        // Preparar datos con formato
         const wb = XLSX.utils.book_new();
         
-        // Preparar datos
-        const data = state.resultado.map(row => ({...row}));
-        
-        // Agregar filas de resumen
-        const resumenData = [
+        // Crear hoja
+        const wsData = [
             ['REPORTE NOMINAL DE PACIENTES ÚNICOS - ' + document.getElementById('indicadorSelect').value],
             ['Pacientes únicos totales: ' + state.resumen.total + ' | Fecha proceso: ' + new Date().toLocaleString()],
             ['RESUMEN -> Denominador: ' + state.resumen.denominador + ' | Numerador: ' + state.resumen.numerador + ' | % Avance: ' + state.resumen.porcentaje.toFixed(2) + '%'],
             [],
-            []
+            [],
+            columns,
+            ...dataRows
         ];
         
-        // Obtener columnas y datos
-        const columns = Object.keys(data[0] || {});
-        const headerRow = columns;
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
         
-        // Crear array de datos con encabezados
-        const dataRows = data.map(row => columns.map(col => row[col] || ''));
-        
-        // Combinar todo
-        const allData = [...resumenData, headerRow, ...dataRows];
-        
-        // Crear hoja de trabajo
-        const ws = XLSX.utils.aoa_to_sheet(allData);
-        
-        // Establecer anchos de columna
-        const colWidths = columns.map(col => ({
+        // Configurar columnas
+        ws['!cols'] = columns.map(col => ({
             wch: Math.max(col.length * 1.2, 15)
         }));
-        ws['!cols'] = colWidths;
         
-        // Fusionar celdas para el título
-        ws['!merges'] = [
-            { s: { r: 0, c: 0 }, e: { r: 0, c: columns.length - 1 } },
-            { s: { r: 1, c: 0 }, e: { r: 1, c: columns.length - 1 } },
-            { s: { r: 2, c: 0 }, e: { r: 2, c: columns.length - 1 } },
-            { s: { r: 3, c: 0 }, e: { r: 3, c: columns.length - 1 } }
-        ];
+        // Fusiones
+        const merges = [];
+        for (let i = 0; i < 4; i++) {
+            merges.push({ s: { r: i, c: 0 }, e: { r: i, c: columns.length - 1 } });
+        }
+        ws['!merges'] = merges;
         
-        // Agregar hoja al libro
+        // === ESTILOS (requiere xlsx-style) ===
+        const style = {
+            fill: { fgColor: { rgb: "1B4F72" } },
+            font: { color: { rgb: "FFFFFF" }, bold: true },
+            alignment: { horizontal: "center", vertical: "center" }
+        };
+        
+        // Aplicar estilos a las celdas del encabezado
+        const headerRowNum = 5; // Fila donde está el encabezado
+        columns.forEach((col, idx) => {
+            const cellRef = XLSX.utils.encode_cell({ r: headerRowNum, c: idx });
+            if (!ws[cellRef]) ws[cellRef] = { v: col };
+            ws[cellRef].s = style;
+        });
+        
+        // Estilo para el título
+        const titleStyle = {
+            font: { bold: true, size: 14, color: { rgb: "1B4F72" } },
+            alignment: { horizontal: "center", vertical: "center" }
+        };
+        ws['A1'].s = titleStyle;
+        
+        // Estilo para el resumen
+        const resumenStyle = {
+            font: { bold: true, color: { rgb: "B7950B" } },
+            fill: { fgColor: { rgb: "FEF9E7" } },
+            alignment: { horizontal: "center", vertical: "center" }
+        };
+        ws['A3'].s = resumenStyle;
+        
+        // Estilo para numerador = 1
+        dataRows.forEach((row, rowIdx) => {
+            const numIdx = columns.indexOf('NUMERADOR');
+            if (numIdx !== -1 && row[numIdx] === 1) {
+                const cellRef = XLSX.utils.encode_cell({ 
+                    r: headerRowNum + 1 + rowIdx, 
+                    c: numIdx 
+                });
+                if (ws[cellRef]) {
+                    ws[cellRef].s = {
+                        fill: { fgColor: { rgb: "C6EFCE" } },
+                        font: { bold: true }
+                    };
+                }
+            }
+        });
+        
         XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
         
         // Generar archivo
         const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
         const blob = new Blob([wbout], { type: 'application/octet-stream' });
         
-        // Descargar
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         const fecha = new Date().toISOString().split('T')[0];
@@ -486,7 +521,7 @@ function exportToExcel() {
         link.click();
         URL.revokeObjectURL(link.href);
         
-        addLog('✅ Reporte exportado a Excel con formato premium');
+        addLog('✅ Reporte exportado con formato premium');
         
     } catch (error) {
         addLog('❌ Error al exportar: ' + error.message);
